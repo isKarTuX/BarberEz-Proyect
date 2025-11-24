@@ -1,7 +1,18 @@
 import React from 'react';
-import { FaClock, FaUser, FaCut, FaMoneyBillWave, FaCheck, FaBan, FaCheckCircle } from 'react-icons/fa';
+import { FaClock, FaUser, FaCut, FaMoneyBillWave, FaCheck, FaBan, FaCheckCircle, FaTrash } from 'react-icons/fa';
 
-export default function CitaCard({ cita, size = 'normal', onConfirmar, onRechazar, onCompletar, loading, userComision }) {
+export default function CitaCard({
+    cita,
+    size = 'normal',
+    onConfirmar,
+    onRechazar,
+    onCompletar,
+    onCancelar,
+    loading,
+    userComision,
+    showActions = true,
+    showCancelButton = false
+}) {
     const getSizeClasses = () => {
         switch (size) {
             case 'compact':
@@ -105,44 +116,62 @@ export default function CitaCard({ cita, size = 'normal', onConfirmar, onRechaza
                 </div>
 
                 {/* Botones de acción */}
-                <div className="flex gap-1.5">
-                    {cita.estado === 'pendiente' && (
-                        <>
+                {showActions && (
+                    <div className="flex gap-1.5">
+                        {showCancelButton && cita.estado === 'pendiente' && (
                             <button
-                                onClick={() => onConfirmar(cita.idCita)}
+                                onClick={onCancelar}
                                 disabled={loading}
-                                className={`btn-primary flex-1 flex items-center justify-center space-x-1 ${classes.button}`}
+                                className={`btn-outline border-red-500 text-red-500 hover:bg-red-500 hover:text-white w-full flex items-center justify-center space-x-1 ${classes.button}`}
                             >
-                                <FaCheck size={classes.icon - 2} />
-                                {size !== 'compact' && <span>Confirmar</span>}
+                                <FaTrash size={classes.icon - 2} />
+                                {size !== 'compact' && <span>Cancelar</span>}
                             </button>
+                        )}
+                        {!showCancelButton && cita.estado === 'pendiente' && (
+                            <>
+                                <button
+                                    onClick={() => onConfirmar(cita.idCita)}
+                                    disabled={loading}
+                                    className={`btn-primary flex-1 flex items-center justify-center space-x-1 ${classes.button}`}
+                                >
+                                    <FaCheck size={classes.icon - 2} />
+                                    {size !== 'compact' && <span>Confirmar</span>}
+                                </button>
+                                <button
+                                    onClick={() => onRechazar(cita.idCita)}
+                                    disabled={loading}
+                                    className={`btn-outline border-red-500 text-red-500 hover:bg-red-500 hover:text-white flex-1 flex items-center justify-center space-x-1 ${classes.button}`}
+                                >
+                                    <FaBan size={classes.icon - 2} />
+                                    {size !== 'compact' && <span>Rechazar</span>}
+                                </button>
+                            </>
+                        )}
+                        {cita.estado === 'confirmada' && (
                             <button
-                                onClick={() => onRechazar(cita.idCita)}
+                                onClick={() => onCompletar(cita.idCita)}
                                 disabled={loading}
-                                className={`btn-outline border-red-500 text-red-500 hover:bg-red-500 hover:text-white flex-1 flex items-center justify-center space-x-1 ${classes.button}`}
+                                className={`btn-gold w-full flex items-center justify-center space-x-1 ${classes.button}`}
                             >
-                                <FaBan size={classes.icon - 2} />
-                                {size !== 'compact' && <span>Rechazar</span>}
+                                <FaCheckCircle size={classes.icon} />
+                                <span>Completar</span>
                             </button>
-                        </>
-                    )}
-                    {cita.estado === 'confirmada' && (
-                        <button
-                            onClick={() => onCompletar(cita.idCita)}
-                            disabled={loading}
-                            className={`btn-gold w-full flex items-center justify-center space-x-1 ${classes.button}`}
-                        >
-                            <FaCheckCircle size={classes.icon} />
-                            <span>Completar</span>
-                        </button>
-                    )}
-                    {cita.estado === 'completada' && (
-                        <div className={`bg-green-100 text-green-800 w-full ${classes.button} rounded-lg font-semibold text-center`}>
-                            <FaCheckCircle className="inline mr-1" size={classes.icon} />
-                            Finalizada
-                        </div>
-                    )}
-                </div>
+                        )}
+                        {cita.estado === 'completada' && (
+                            <div className={`bg-green-100 text-green-800 w-full ${classes.button} rounded-lg font-semibold text-center`}>
+                                <FaCheckCircle className="inline mr-1" size={classes.icon} />
+                                Finalizada
+                            </div>
+                        )}
+                        {cita.estado === 'cancelada' && (
+                            <div className={`bg-red-100 text-red-800 w-full ${classes.button} rounded-lg font-semibold text-center`}>
+                                <FaBan className="inline mr-1" size={classes.icon} />
+                                Cancelada
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
         </div>
     );

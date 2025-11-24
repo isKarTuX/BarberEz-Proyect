@@ -597,10 +597,19 @@ export default function ClienteDashboard() {
                 {/* MIS CITAS PENDIENTES */}
                 {activeTab === 'citas' && (
                     <div className="space-y-6 animate-fadeIn">
+                        {/* LayoutControl */}
+                        <LayoutControl
+                            columns={layoutColumns}
+                            onColumnsChange={setLayoutColumns}
+                            size={layoutSize}
+                            onSizeChange={setLayoutSize}
+                        />
+
                         <div className="card">
                             <div className="flex items-center space-x-3 mb-6">
                                 <FaCalendarCheck className="w-7 h-7 text-primary" />
                                 <h2 className="text-2xl font-bold text-gray-800">Mis Citas Pendientes</h2>
+                                <span className="badge badge-warning text-base">{citasPendientes.length}</span>
                             </div>
                             {citasPendientes.length === 0 ? (
                                 <div className="text-center py-12">
@@ -615,54 +624,31 @@ export default function ClienteDashboard() {
                                     </button>
                                 </div>
                             ) : (
-                                <div className="grid gap-4">
-                                    {citasPendientes.map(cita => (
-                                        <div key={cita.idCita} className="border-2 border-primary/20 rounded-xl p-6 hover:shadow-lg transition-all bg-gradient-to-r from-white to-primary/5">
-                                            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                                                <div className="flex-1">
-                                                    <div className="flex items-center space-x-2 mb-3">
-                                                        <span className="badge badge-warning">
-                                                            <FaHourglassHalf className="inline w-3 h-3 mr-1" />
-                                                            Pendiente de confirmación
-                                                        </span>
-                                                    </div>
-                                                    <p className="text-2xl font-bold text-gray-800 mb-2">
-                                                        {new Date(cita.fecha).toLocaleDateString('es-CO', {
-                                                            weekday: 'long',
-                                                            year: 'numeric',
-                                                            month: 'long',
-                                                            day: 'numeric'
-                                                        })}
-                                                    </p>
-                                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-                                                        <p className="text-gray-600">
-                                                            <FaClock className="inline text-primary mr-2" />
-                                                            <span className="font-semibold">Hora:</span> {cita.horaIn?.substring(0, 5)}
-                                                        </p>
-                                                        <p className="text-gray-600">
-                                                            <FaUserTie className="inline text-primary mr-2" />
-                                                            <span className="font-semibold">Barbero:</span> {cita.nombreBarbero}
-                                                        </p>
-                                                        <p className="text-gray-600">
-                                                            <FaCut className="inline text-primary mr-2" />
-                                                            <span className="font-semibold">Servicios:</span> {cita.servicios}
-                                                        </p>
-                                                    </div>
-                                                    <p className="text-2xl font-bold text-primary mt-3">
-                                                        Total: ${cita.total?.toLocaleString()}
-                                                    </p>
-                                                </div>
-                                                <button
-                                                    onClick={() => handleCancelarCita(cita.idCita)}
-                                                    className="btn-outline border-red-500 text-red-500 hover:bg-red-500 hover:text-white flex items-center justify-center space-x-2 px-6 py-3"
-                                                >
-                                                    <FaTrash />
-                                                    <span>Cancelar</span>
-                                                </button>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
+                                <>
+                                    <div className={`grid ${getGridClass()} gap-3`}>
+                                        {getCitasPendientesPaginadas().map(cita => (
+                                            <CitaCard
+                                                key={cita.idCita}
+                                                cita={cita}
+                                                size={layoutSize}
+                                                onCancelar={() => handleCancelarCita(cita.idCita)}
+                                                loading={loading}
+                                                showCancelButton={true}
+                                            />
+                                        ))}
+                                    </div>
+
+                                    {/* Paginación */}
+                                    {citasPendientes.length > itemsPerPage && (
+                                        <Pagination
+                                            currentPage={currentPagePendientes}
+                                            totalPages={getTotalPages(citasPendientes.length)}
+                                            onPageChange={setCurrentPagePendientes}
+                                            itemsPerPage={itemsPerPage}
+                                            totalItems={citasPendientes.length}
+                                        />
+                                    )}
+                                </>
                             )}
                         </div>
                     </div>
@@ -819,50 +805,63 @@ export default function ClienteDashboard() {
                             <div className="flex items-center justify-between mb-6">
                                 <h2 className="text-2xl font-bold text-gray-800 flex items-center space-x-2">
                                     <FaHistory className="text-primary" />
-                                    <span>Historial ({historialCitas.length})</span>
+                                    <span>Historial ({getHistorialFiltrado().length})</span>
                                 </h2>
                             </div>
 
-                            {historialCitas.length === 0 ? (
+                            {getHistorialFiltrado().length === 0 ? (
                                 <div className="text-center py-12">
                                     <FaHistory className="w-16 h-16 text-gray-300 mx-auto mb-4" />
                                     <p className="text-gray-500 text-lg">No hay citas en el historial</p>
                                 </div>
                             ) : (
-                                <div className="space-y-4">
-                                    {historialCitas.map(cita => (
-                                        <div key={cita.idCita} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
-                                            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                                                <div className="flex-1">
-                                                    <div className="flex items-center space-x-2 mb-2">
-                                                        <span className={`badge whitespace-nowrap ${
-                                                            cita.estado === 'completada' ? 'badge-success' :
-                                                            cita.estado === 'confirmada' ? 'badge-info' :
-                                                            'badge-danger'
-                                                        }`}>
-                                                            {cita.estado === 'completada' && <FaCheckCircle className="inline w-3 h-3 mr-1" />}
-                                                            {cita.estado === 'cancelada' && <FaTimesCircle className="inline w-3 h-3 mr-1" />}
-                                                            {cita.estado}
-                                                        </span>
+                                <>
+                                    <div className="space-y-4">
+                                        {getHistorialPaginado().map(cita => (
+                                            <div key={cita.idCita} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                                                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                                                    <div className="flex-1">
+                                                        <div className="flex items-center space-x-2 mb-2">
+                                                            <span className={`badge whitespace-nowrap ${
+                                                                cita.estado === 'completada' ? 'badge-success' :
+                                                                cita.estado === 'confirmada' ? 'badge-info' :
+                                                                'badge-danger'
+                                                            }`}>
+                                                                {cita.estado === 'completada' && <FaCheckCircle className="inline w-3 h-3 mr-1" />}
+                                                                {cita.estado === 'cancelada' && <FaTimesCircle className="inline w-3 h-3 mr-1" />}
+                                                                {cita.estado}
+                                                            </span>
+                                                        </div>
+                                                        <p className="text-lg font-bold text-gray-800">
+                                                            {new Date(cita.fecha).toLocaleDateString('es-CO')} - {cita.horaIn?.substring(0, 5)}
+                                                        </p>
+                                                        <p className="text-gray-600">
+                                                            <FaUserTie className="inline text-primary mr-1" />
+                                                            {cita.nombreBarbero}
+                                                        </p>
+                                                        <p className="text-sm text-gray-600">{cita.servicios}</p>
                                                     </div>
-                                                    <p className="text-lg font-bold text-gray-800">
-                                                        {new Date(cita.fecha).toLocaleDateString('es-CO')} - {cita.horaIn?.substring(0, 5)}
-                                                    </p>
-                                                    <p className="text-gray-600">
-                                                        <FaUserTie className="inline text-primary mr-1" />
-                                                        {cita.nombreBarbero}
-                                                    </p>
-                                                    <p className="text-sm text-gray-600">{cita.servicios}</p>
-                                                </div>
-                                                <div className="text-right">
-                                                    <p className="text-2xl font-bold text-primary">
-                                                        ${cita.total?.toLocaleString()}
-                                                    </p>
+                                                    <div className="text-right">
+                                                        <p className="text-2xl font-bold text-primary">
+                                                            ${cita.total?.toLocaleString()}
+                                                        </p>
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
-                                    ))}
-                                </div>
+                                        ))}
+                                    </div>
+
+                                    {/* Paginación */}
+                                    {getHistorialFiltrado().length > itemsPerPage && (
+                                        <Pagination
+                                            currentPage={currentPageHistorial}
+                                            totalPages={getTotalPages(getHistorialFiltrado().length)}
+                                            onPageChange={setCurrentPageHistorial}
+                                            itemsPerPage={itemsPerPage}
+                                            totalItems={getHistorialFiltrado().length}
+                                        />
+                                    )}
+                                </>
                             )}
                         </div>
                     </div>
