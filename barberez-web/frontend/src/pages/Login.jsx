@@ -65,8 +65,12 @@ export default function Login() {
                 <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8 border border-primary/20">
                     {/* Logo y Título */}
                     <div className="text-center mb-8">
-                        <div className="logo-container mx-auto mb-4 animate-fadeIn">
-                            <Scissors className="w-8 h-8 text-white" strokeWidth={2.5} />
+                        <div className="mx-auto mb-4 animate-fadeIn">
+                            <img
+                                src="/images/logo.png"
+                                alt="BarberEz Logo"
+                                className="w-24 h-24 mx-auto rounded-full shadow-2xl border-4 border-white object-cover"
+                            />
                         </div>
                         <h1 className="text-4xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent mb-2">
                             BarberEz

@@ -403,8 +403,12 @@ export default function AdminDashboard() {
                 <div className="max-w-7xl mx-auto px-4 py-4">
                     <div className="flex justify-between items-center">
                         <div className="flex items-center space-x-4">
-                            <div className="logo-container">
-                                <FaCut className="w-7 h-7 text-white" />
+                            <div className="w-14 h-14 rounded-full overflow-hidden bg-white shadow-lg">
+                                <img
+                                    src="/images/logo-icon.png"
+                                    alt="BarberEz"
+                                    className="w-full h-full object-cover"
+                                />
                             </div>
                             <div>
                                 <h1 className="text-2xl font-bold">BarberEz</h1>

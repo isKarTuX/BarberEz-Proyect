@@ -175,8 +175,12 @@ export default function AdminDashboard() {
                 <div className="max-w-7xl mx-auto px-4 py-4">
                     <div className="flex justify-between items-center">
                         <div className="flex items-center space-x-4">
-                            <div className="logo-container">
-                                <Scissors className="w-8 h-8 text-white" strokeWidth={2.5} />
+                            <div className="w-14 h-14 rounded-full overflow-hidden bg-white shadow-lg">
+                                <img
+                                    src="/images/logo-icon.png"
+                                    alt="BarberEz"
+                                    className="w-full h-full object-cover"
+                                />
                             </div>
                             <div>
                                 <h1 className="text-2xl font-bold">BarberEz</h1>
