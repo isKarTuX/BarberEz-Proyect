@@ -16,6 +16,40 @@ body {
   background: #F7FAFC;
 }
 
+/* Ocultar el botón nativo de mostrar/ocultar contraseña del navegador */
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear {
+  display: none;
+}
+
+input[type="password"]::-webkit-credentials-auto-fill-button,
+input[type="password"]::-webkit-contacts-auto-fill-button {
+  visibility: hidden;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+}
+
+/* Para navegadores basados en Chromium (Chrome, Edge, etc.) */
+input[type="password"]::-webkit-textfield-decoration-container {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+input[type="password"]::-webkit-reveal {
+  display: none;
+}
+
+/* Para navegadores basados en Chromium - ocultar ícono de contraseña guardada */
+input[type="password"]::-webkit-credentials-autofill-button {
+  visibility: hidden;
+  display: none !important;
+  pointer-events: none;
+  height: 0;
+  width: 0;
+  margin: 0;
+}
+
 @layer components {
   /* Botones principales con tema retro */
   .btn-primary {
