@@ -215,8 +215,8 @@ export default function BarberoDashboard() {
 
     // Obtener items paginados para cada sección
     const getCitasHoyPaginadas = () => paginate(getCitasHoyFiltradas(), currentPageHoy);
-    const getCitasPendientesPaginadas = () => paginate(citasPendientes, currentPagePendientes);
-    const getCitasConfirmadasPaginadas = () => paginate(citasConfirmadas, currentPageConfirmadas);
+    const getCitasPendientesPaginadas = () => paginate(filtrarYOrdenarPendientes(), currentPagePendientes);
+    const getCitasConfirmadasPaginadas = () => paginate(filtrarYOrdenarConfirmadas(), currentPageConfirmadas);
 
     // Función para obtener citas filtradas del historial
     const getCitasHistorialFiltradas = () => {
@@ -908,68 +908,57 @@ export default function BarberoDashboard() {
                                     </div>
 
                                     {/* Lista de pendientes por confirmar */}
+                                    <LayoutControl
+                                        columns={layoutColumns}
+                                        onColumnsChange={setLayoutColumns}
+                                        size={layoutSize}
+                                        onSizeChange={setLayoutSize}
+                                    />
+
                                     <div className="card">
-                                        <div className="flex items-center justify-between mb-6">
+                                        <div className="flex items-center justify-between mb-4">
                                             <div className="flex items-center space-x-3">
                                                 <FaHourglassHalf className="w-6 h-6 text-yellow-600"/>
-                                                <h3 className="text-xl font-bold text-gray-800">Citas Pendientes de Confirmación</h3>
+                                                <h3 className="text-xl font-bold text-gray-800">Pendientes de Confirmación</h3>
                                             </div>
-                                            <span className="badge badge-warning text-lg px-4 py-2">{filtrarYOrdenarPendientes().length}</span>
+                                            <span className="badge badge-warning text-base px-3 py-1.5">{filtrarYOrdenarPendientes().length}</span>
                                         </div>
                                         {filtrarYOrdenarPendientes().length === 0 ? (
                                             <div className="text-center py-12">
                                                 <FaClipboardList className="w-16 h-16 text-gray-300 mx-auto mb-4"/>
-                                                <p className="text-gray-500 text-lg">{citasPendientes.length === 0 ? 'No hay citas pendientes de confirmación' : 'No se encontraron resultados con los filtros aplicados'}</p>
+                                                <p className="text-gray-500 text-lg">
+                                                    {citasPendientes.length === 0
+                                                        ? 'No hay citas pendientes de confirmación'
+                                                        : 'No se encontraron resultados con los filtros aplicados'
+                                                    }
+                                                </p>
                                             </div>
                                         ) : (
-                                            <div className="space-y-4">
-                                                {filtrarYOrdenarPendientes().map(cita => (
-                                                    <div key={cita.idCita} className="border-2 border-yellow-300 rounded-xl p-6 bg-yellow-50 hover:shadow-lg transition-shadow">
-                                                        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-                                                            <div className="flex-1">
-                                                                <div className="flex items-center space-x-2 mb-3">
-                                                                    <span className="badge badge-warning"><FaHourglassHalf className="inline w-3 h-3 mr-1"/> Pendiente</span>
-                                                                </div>
-                                                                <p className="text-2xl font-bold text-gray-800 mb-3">
-                                                                    {new Date(cita.fecha).toLocaleDateString('es-CO', {
-                                                                        weekday: 'long',
-                                                                        day: 'numeric',
-                                                                        month: 'long',
-                                                                        year: 'numeric'
-                                                                    })} - <span className="text-primary">{cita.horaIn?.substring(0, 5)}</span>
-                                                                </p>
-                                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-                                                                    <p className="text-lg"><FaUser className="inline text-primary mr-2"/><span className="font-semibold">Cliente:</span> {cita.nombreCliente}</p>
-                                                                    <p className="text-lg"><FaCut className="inline text-primary mr-2"/><span className="font-semibold">Servicios:</span> {cita.servicios}</p>
-                                                                </div>
-                                                                <p className="text-2xl font-bold text-primary">
-                                                                    <FaMoneyBillWave className="inline mr-2"/>
-                                                                    ${cita.total?.toLocaleString()}
-                                                                </p>
-                                                            </div>
-                                                            {/* Botones de acción */}
-                                                            <div className="flex flex-col gap-2">
-                                                                <button
-                                                                    onClick={() => handleConfirmarCita(cita.idCita)}
-                                                                    disabled={loading}
-                                                                    className="btn-success flex items-center justify-center space-x-2 px-6 py-3 whitespace-nowrap"
-                                                                >
-                                                                    <FaCheckCircle/>
-                                                                    <span>Confirmar</span>
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => handleRechazarCita(cita.idCita)}
-                                                                    disabled={loading}
-                                                                    className="btn-danger flex items-center justify-center space-x-2 px-6 py-3 whitespace-nowrap"
-                                                                >
-                                                                    <FaBan/>
-                                                                    <span>Rechazar</span>
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
+                                            <>
+                                                <div className={`grid ${getGridClass()} gap-3`}>
+                                                    {getCitasPendientesPaginadas().map(cita => (
+                                                        <CitaCard
+                                                            key={cita.idCita}
+                                                            cita={cita}
+                                                            size={layoutSize}
+                                                            onConfirmar={handleConfirmarCita}
+                                                            onRechazar={handleRechazarCita}
+                                                            onCompletar={handleCompletarCita}
+                                                            loading={loading}
+                                                            userComision={user.comision}
+                                                        />
+                                                    ))}
+                                                </div>
+
+                                                {/* Paginación */}
+                                                <Pagination
+                                                    currentPage={currentPagePendientes}
+                                                    totalPages={getTotalPages(filtrarYOrdenarPendientes().length)}
+                                                    onPageChange={setCurrentPagePendientes}
+                                                    itemsPerPage={itemsPerPage}
+                                                    totalItems={filtrarYOrdenarPendientes().length}
+                                                />
+                                            </>
                                         )}
                                     </div>
                                 </div>
@@ -1086,75 +1075,57 @@ export default function BarberoDashboard() {
                                     </div>
 
                                     {/* Lista de pendientes por completar */}
+                                    <LayoutControl
+                                        columns={layoutColumns}
+                                        onColumnsChange={setLayoutColumns}
+                                        size={layoutSize}
+                                        onSizeChange={setLayoutSize}
+                                    />
+
                                     <div className="card">
-                                        <div className="flex items-center justify-between mb-6">
+                                        <div className="flex items-center justify-between mb-4">
                                             <div className="flex items-center space-x-3">
                                                 <FaCheckCircle className="w-6 h-6 text-blue-600"/>
-                                                <h3 className="text-xl font-bold text-gray-800">Citas Pendientes por Completar</h3>
+                                                <h3 className="text-xl font-bold text-gray-800">Pendientes por Completar</h3>
                                             </div>
-                                            <span className="badge badge-info text-lg px-4 py-2">{filtrarYOrdenarConfirmadas().length}</span>
+                                            <span className="badge badge-info text-base px-3 py-1.5">{filtrarYOrdenarConfirmadas().length}</span>
                                         </div>
                                         {filtrarYOrdenarConfirmadas().length === 0 ? (
                                             <div className="text-center py-12">
                                                 <FaCheckCircle className="w-16 h-16 text-gray-300 mx-auto mb-4"/>
-                                                <p className="text-gray-500 text-lg">{citasConfirmadas.length === 0 ? 'No hay citas pendientes por completar' : 'No se encontraron resultados con los filtros aplicados'}</p>
+                                                <p className="text-gray-500 text-lg">
+                                                    {citasConfirmadas.length === 0
+                                                        ? 'No hay citas pendientes por completar'
+                                                        : 'No se encontraron resultados con los filtros aplicados'
+                                                    }
+                                                </p>
                                             </div>
                                         ) : (
-                                            <div className="space-y-4">
-                                                {filtrarYOrdenarConfirmadas().map(cita => (
-                                                    <div key={cita.idCita} className="border-2 border-blue-300 rounded-xl p-6 bg-blue-50 hover:shadow-lg transition-shadow">
-                                                        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-                                                            <div className="flex-1">
-                                                                <div className="flex items-center space-x-2 mb-3">
-                                                                    <span className="badge badge-info"><FaCheckCircle className="inline w-3 h-3 mr-1"/> Confirmada</span>
-                                                                </div>
-                                                                <p className="text-2xl font-bold text-gray-800 mb-3">
-                                                                    {new Date(cita.fecha).toLocaleDateString('es-CO', {
-                                                                        weekday: 'long',
-                                                                        day: 'numeric',
-                                                                        month: 'long',
-                                                                        year: 'numeric'
-                                                                    })} - <span className="text-primary">{cita.horaIn?.substring(0, 5)}</span>
-                                                                </p>
-                                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-                                                                    <p className="text-lg"><FaUser className="inline text-primary mr-2"/><span className="font-semibold">Cliente:</span> {cita.nombreCliente}</p>
-                                                                    <p className="text-lg"><FaCut className="inline text-primary mr-2"/><span className="font-semibold">Servicios:</span> {cita.servicios}</p>
-                                                                </div>
-                                                                <div className="flex items-center space-x-4">
-                                                                    <p className="text-2xl font-bold text-primary">
-                                                                        <FaMoneyBillWave className="inline mr-2"/>
-                                                                        ${cita.total?.toLocaleString()}
-                                                                    </p>
-                                                                    {user.comision && (
-                                                                        <p className="text-lg text-green-600 font-semibold">
-                                                                            Tu comisión: ${((parseFloat(cita.total) * parseFloat(user.comision) / 100) || 0).toLocaleString()}
-                                                                        </p>
-                                                                    )}
-                                                                </div>
-                                                            </div>
-                                                            {/* Botones de acción */}
-                                                            <div className="flex flex-col gap-2">
-                                                                <button
-                                                                    onClick={() => handleCompletarCita(cita.idCita)}
-                                                                    disabled={loading}
-                                                                    className="btn-gold flex items-center justify-center space-x-2 px-6 py-3 whitespace-nowrap"
-                                                                >
-                                                                    <FaCheckCircle/>
-                                                                    <span>Completar</span>
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => handleRechazarCita(cita.idCita)}
-                                                                    disabled={loading}
-                                                                    className="btn-danger flex items-center justify-center space-x-2 px-6 py-3 whitespace-nowrap"
-                                                                >
-                                                                    <FaBan/>
-                                                                    <span>Rechazar</span>
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
+                                            <>
+                                                <div className={`grid ${getGridClass()} gap-3`}>
+                                                    {getCitasConfirmadasPaginadas().map(cita => (
+                                                        <CitaCard
+                                                            key={cita.idCita}
+                                                            cita={cita}
+                                                            size={layoutSize}
+                                                            onConfirmar={handleConfirmarCita}
+                                                            onRechazar={handleRechazarCita}
+                                                            onCompletar={handleCompletarCita}
+                                                            loading={loading}
+                                                            userComision={user.comision}
+                                                        />
+                                                    ))}
+                                                </div>
+
+                                                {/* Paginación */}
+                                                <Pagination
+                                                    currentPage={currentPageConfirmadas}
+                                                    totalPages={getTotalPages(filtrarYOrdenarConfirmadas().length)}
+                                                    onPageChange={setCurrentPageConfirmadas}
+                                                    itemsPerPage={itemsPerPage}
+                                                    totalItems={filtrarYOrdenarConfirmadas().length}
+                                                />
+                                            </>
                                         )}
                                     </div>
                                 </div>
