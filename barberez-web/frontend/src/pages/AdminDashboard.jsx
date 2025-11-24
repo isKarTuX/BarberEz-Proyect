@@ -15,6 +15,8 @@ import ToggleSwitch from '../components/ToggleSwitch';
 import Modal from '../components/Modal';
 import Toast from '../components/Toast';
 import ConfirmModal from '../components/ConfirmModal';
+import LayoutControl from '../components/LayoutControl';
+import Pagination from '../components/Pagination';
 
 export default function AdminDashboard() {
     const { user, logout } = useAuth();
@@ -28,6 +30,14 @@ export default function AdminDashboard() {
     const [todasLasCitas, setTodasLasCitas] = useState([]);
     const [estadisticasCitas, setEstadisticasCitas] = useState(null);
     const [barberos, setBarberos] = useState([]);
+
+    // Layout y paginación
+    const [layoutColumns, setLayoutColumns] = useState(2);
+    const [layoutSize, setLayoutSize] = useState('normal');
+    const [currentPageCitas, setCurrentPageCitas] = useState(1);
+    const [currentPageClientes, setCurrentPageClientes] = useState(1);
+    const [currentPageBarberos, setCurrentPageBarberos] = useState(1);
+    const [itemsPerPage, setItemsPerPage] = useState(12);
 
     // Estados de filtros
     const [filtros, setFiltros] = useState({
@@ -103,6 +113,92 @@ export default function AdminDashboard() {
     const [usuarioEditar, setUsuarioEditar] = useState(null);
     const [modalPassword, setModalPassword] = useState(false);
     const [nuevaPassword, setNuevaPassword] = useState('');
+
+    // Ajustar items por página según layout
+    useEffect(() => {
+        let items = 12;
+        if (layoutColumns === 1) {
+            items = layoutSize === 'compact' ? 15 : layoutSize === 'comfortable' ? 8 : 10;
+        } else if (layoutColumns === 2) {
+            items = layoutSize === 'compact' ? 20 : layoutSize === 'comfortable' ? 12 : 16;
+        } else if (layoutColumns === 3) {
+            items = layoutSize === 'compact' ? 30 : layoutSize === 'comfortable' ? 18 : 24;
+        }
+        setItemsPerPage(items);
+    }, [layoutColumns, layoutSize]);
+
+    // Funciones de paginación
+    const paginate = (items, currentPage) => {
+        const startIndex = (currentPage - 1) * itemsPerPage;
+        const endIndex = startIndex + itemsPerPage;
+        return items.slice(startIndex, endIndex);
+    };
+
+    const getGridClass = () => {
+        switch (layoutColumns) {
+            case 1:
+                return 'grid-cols-1';
+            case 2:
+                return 'grid-cols-1 lg:grid-cols-2';
+            case 3:
+                return 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3';
+            default:
+                return 'grid-cols-1 lg:grid-cols-2';
+        }
+    };
+
+    const getTotalPages = (totalItems) => Math.ceil(totalItems / itemsPerPage) || 1;
+
+    const getCitasPaginadas = () => paginate(todasLasCitas, currentPageCitas);
+
+    const filtrarYOrdenarClientes = () => {
+        let resultado = [...clientes];
+        // Filtrar por búsqueda
+        if (filtroGestion) {
+            const busqueda = filtroGestion.toLowerCase();
+            resultado = resultado.filter(c =>
+                c.nombre?.toLowerCase().includes(busqueda) ||
+                c.correo?.toLowerCase().includes(busqueda) ||
+                c.cedula?.includes(busqueda) ||
+                c.telefono?.includes(busqueda)
+            );
+        }
+        // Ordenar
+        if (ordenClientes === 'gastado') {
+            resultado.sort((a, b) => (b.totalGastado || 0) - (a.totalGastado || 0));
+        } else if (ordenClientes === 'citas') {
+            resultado.sort((a, b) => (b.totalCitas || 0) - (a.totalCitas || 0));
+        } else if (ordenClientes === 'reciente') {
+            resultado.sort((a, b) => new Date(b.fechaRegistro) - new Date(a.fechaRegistro));
+        }
+        return resultado;
+    };
+
+    const filtrarYOrdenarBarberos = () => {
+        let resultado = [...barberosGestion];
+        // Filtrar por búsqueda
+        if (filtroGestion) {
+            const busqueda = filtroGestion.toLowerCase();
+            resultado = resultado.filter(b =>
+                b.nombre?.toLowerCase().includes(busqueda) ||
+                b.correo?.toLowerCase().includes(busqueda) ||
+                b.cedula?.includes(busqueda) ||
+                b.telefono?.includes(busqueda)
+            );
+        }
+        // Ordenar
+        if (ordenBarberos === 'citas') {
+            resultado.sort((a, b) => (b.totalCitas || 0) - (a.totalCitas || 0));
+        } else if (ordenBarberos === 'ingresos') {
+            resultado.sort((a, b) => (b.totalIngresos || 0) - (a.totalIngresos || 0));
+        } else if (ordenBarberos === 'comision') {
+            resultado.sort((a, b) => (b.comisionTotal || 0) - (a.comisionTotal || 0));
+        }
+        return resultado;
+    };
+
+    const getClientesPaginados = () => paginate(filtrarYOrdenarClientes(), currentPageClientes);
+    const getBarberosPaginados = () => paginate(filtrarYOrdenarBarberos(), currentPageBarberos);
 
     useEffect(() => {
         if (activeTab === 'estadisticas') {
@@ -901,7 +997,7 @@ export default function AdminDashboard() {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {todasLasCitas.map((cita) => (
+                                            {getCitasPaginadas().map((cita) => (
                                                 <tr key={cita.idCita}>
                                                     <td className="font-mono text-sm">#{cita.idCita}</td>
                                                     <td className="font-semibold whitespace-nowrap">
@@ -947,6 +1043,17 @@ export default function AdminDashboard() {
                                         </tbody>
                                     </table>
                                 </div>
+                            )}
+
+                            {/* Paginación */}
+                            {todasLasCitas.length > 0 && (
+                                <Pagination
+                                    currentPage={currentPageCitas}
+                                    totalPages={getTotalPages(todasLasCitas.length)}
+                                    onPageChange={setCurrentPageCitas}
+                                    itemsPerPage={itemsPerPage}
+                                    totalItems={todasLasCitas.length}
+                                />
                             )}
                         </div>
                     </div>
@@ -1196,31 +1303,32 @@ export default function AdminDashboard() {
                             <div className="card">
                                 <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center space-x-2">
                                     <FaUserFriends className="text-primary" />
-                                    <span>Gestión de Clientes ({clientes.length})</span>
+                                    <span>Gestión de Clientes ({filtrarYOrdenarClientes().length})</span>
                                 </h2>
 
-                                {clientes.length === 0 ? (
+                                {filtrarYOrdenarClientes().length === 0 ? (
                                     <div className="text-center py-12">
                                         <FaUserFriends className="w-16 h-16 text-gray-300 mx-auto mb-4" />
                                         <p className="text-gray-500">No se encontraron clientes</p>
                                     </div>
                                 ) : (
-                                    <div className="overflow-x-auto custom-scrollbar">
-                                        <table className="table-retro">
-                                            <thead>
-                                                <tr>
-                                                    <th>Cliente</th>
-                                                    <th>Contacto</th>
-                                                    <th>Cédula</th>
-                                                    <th>Registro</th>
-                                                    <th className="text-center">Citas</th>
-                                                    <th className="text-right">Gastado</th>
-                                                    <th className="text-center">Última Cita</th>
-                                                    <th className="text-center">Acciones</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {clientes.map((cliente) => (
+                                    <>
+                                        <div className="overflow-x-auto custom-scrollbar">
+                                            <table className="table-retro">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Cliente</th>
+                                                        <th>Contacto</th>
+                                                        <th>Cédula</th>
+                                                        <th>Registro</th>
+                                                        <th className="text-center">Citas</th>
+                                                        <th className="text-right">Gastado</th>
+                                                        <th className="text-center">Última Cita</th>
+                                                        <th className="text-center">Acciones</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {getClientesPaginados().map((cliente) => (
                                                     <tr key={cliente.idUsuario}>
                                                         <td className="font-semibold">{cliente.nombre}</td>
                                                         <td>
@@ -1290,6 +1398,16 @@ export default function AdminDashboard() {
                                             </tbody>
                                         </table>
                                     </div>
+
+                                    {/* Paginación */}
+                                    <Pagination
+                                        currentPage={currentPageClientes}
+                                        totalPages={getTotalPages(filtrarYOrdenarClientes().length)}
+                                        onPageChange={setCurrentPageClientes}
+                                        itemsPerPage={itemsPerPage}
+                                        totalItems={filtrarYOrdenarClientes().length}
+                                    />
+                                    </>
                                 )}
                             </div>
                         )}
@@ -1299,32 +1417,33 @@ export default function AdminDashboard() {
                             <div className="card">
                                 <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center space-x-2">
                                     <FaUserTie className="text-primary" />
-                                    <span>Gestión de Barberos ({barberosGestion.length})</span>
+                                    <span>Gestión de Barberos ({filtrarYOrdenarBarberos().length})</span>
                                 </h2>
 
-                                {barberosGestion.length === 0 ? (
+                                {filtrarYOrdenarBarberos().length === 0 ? (
                                     <div className="text-center py-12">
                                         <FaUserTie className="w-16 h-16 text-gray-300 mx-auto mb-4" />
                                         <p className="text-gray-500">No se encontraron barberos</p>
                                     </div>
                                 ) : (
-                                    <div className="overflow-x-auto custom-scrollbar">
-                                        <table className="table-retro">
-                                            <thead>
-                                                <tr>
-                                                    <th>Barbero</th>
-                                                    <th>Contacto</th>
-                                                    <th>Cédula</th>
-                                                    <th className="text-center">Comisión</th>
-                                                    <th className="text-center">Citas</th>
-                                                    <th className="text-right">Ingresos</th>
-                                                    <th className="text-right">Comisión</th>
-                                                    <th className="text-center">Última Cita</th>
-                                                    <th className="text-center">Acciones</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {barberosGestion.map((barbero) => (
+                                    <>
+                                        <div className="overflow-x-auto custom-scrollbar">
+                                            <table className="table-retro">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Barbero</th>
+                                                        <th>Contacto</th>
+                                                        <th>Cédula</th>
+                                                        <th className="text-center">Comisión</th>
+                                                        <th className="text-center">Citas</th>
+                                                        <th className="text-right">Ingresos</th>
+                                                        <th className="text-right">Comisión</th>
+                                                        <th className="text-center">Última Cita</th>
+                                                        <th className="text-center">Acciones</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {getBarberosPaginados().map((barbero) => (
                                                     <tr key={barbero.idUsuario}>
                                                         <td className="font-semibold">{barbero.nombre}</td>
                                                         <td>
@@ -1400,6 +1519,16 @@ export default function AdminDashboard() {
                                             </tbody>
                                         </table>
                                     </div>
+
+                                    {/* Paginación */}
+                                    <Pagination
+                                        currentPage={currentPageBarberos}
+                                        totalPages={getTotalPages(filtrarYOrdenarBarberos().length)}
+                                        onPageChange={setCurrentPageBarberos}
+                                        itemsPerPage={itemsPerPage}
+                                        totalItems={filtrarYOrdenarBarberos().length}
+                                    />
+                                    </>
                                 )}
                             </div>
                         )}
