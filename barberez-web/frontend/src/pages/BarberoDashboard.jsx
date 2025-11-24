@@ -527,86 +527,77 @@ export default function BarberoDashboard() {
                                         <p className="text-gray-500 text-lg">No tienes citas programadas para hoy</p>
                                     </div>
                                 ) : (
-                                    <div className="space-y-4">
+                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                                         {citasHoy.map(cita => (
                                             <div
                                                 key={cita.idCita}
-                                                className={`border-2 rounded-xl p-6 transition-all ${
+                                                className={`border-2 rounded-xl p-4 transition-all ${
                                                     cita.estado === 'completada' ? 'border-green-300 bg-green-50' :
                                                         cita.estado === 'confirmada' ? 'border-primary/30 bg-primary/5' :
                                                             cita.estado === 'pendiente' ? 'border-yellow-300 bg-yellow-50' :
                                                                 'border-gray-200'
                                                 }`}
                                             >
-                                                <div
-                                                    className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-                                                    <div className="flex-1">
-                                                        <div className="flex items-center space-x-2 mb-3">
-                                                        <span className={`badge whitespace-nowrap ${
+                                                <div className="space-y-3">
+                                                    {/* Header compacto con hora y estado */}
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="text-2xl font-bold text-primary flex items-center">
+                                                            <FaClock className="mr-2"/>
+                                                            {cita.horaIn?.substring(0, 5)}
+                                                        </span>
+                                                        <span className={`badge text-xs ${
                                                             cita.estado === 'completada' ? 'badge-success' :
                                                                 cita.estado === 'confirmada' ? 'badge-info' :
                                                                     cita.estado === 'pendiente' ? 'badge-warning' :
                                                                         'badge-danger'
                                                         }`}>
-                                                            {cita.estado === 'completada' &&
-                                                                <FaCheckCircle className="inline w-3 h-3 mr-1"/>}
-                                                            {cita.estado === 'pendiente' &&
-                                                                <FaHourglassHalf className="inline w-3 h-3 mr-1"/>}
-                                                            {cita.estado === 'cancelada' &&
-                                                                <FaTimesCircle className="inline w-3 h-3 mr-1"/>}
                                                             {cita.estado}
                                                         </span>
-                                                            <span className="text-2xl font-bold text-primary">
-                                                            <FaClock className="inline mr-2"/>
-                                                                {cita.horaIn?.substring(0, 5)}
-                                                        </span>
-                                                        </div>
-
-                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-                                                            <p className="text-lg">
-                                                                <FaUser className="inline text-primary mr-2"/>
-                                                                <span
-                                                                    className="font-semibold">Cliente:</span> {cita.nombreCliente}
-                                                            </p>
-                                                            <p className="text-lg">
-                                                                <FaCut className="inline text-primary mr-2"/>
-                                                                <span
-                                                                    className="font-semibold">Servicios:</span> {cita.servicios}
-                                                            </p>
-                                                        </div>
-
-                                                        <div className="flex items-center space-x-4">
-                                                            <p className="text-2xl font-bold text-primary">
-                                                                <FaMoneyBillWave className="inline mr-2"/>
-                                                                ${cita.total?.toLocaleString()}
-                                                            </p>
-                                                            {user.comision && cita.estado === 'completada' && (
-                                                                <p className="text-lg text-green-600 font-semibold">
-                                                                    Tu comisión:
-                                                                    ${((cita.total * user.comision / 100) || 0).toLocaleString()}
-                                                                </p>
-                                                            )}
-                                                        </div>
                                                     </div>
 
-                                                    {/* Botones de acción */}
-                                                    <div className="flex flex-col gap-2">
+                                                    {/* Información del cliente y servicios */}
+                                                    <div className="space-y-2">
+                                                        <p className="text-sm">
+                                                            <FaUser className="inline text-primary mr-1 text-xs"/>
+                                                            <span className="font-semibold">{cita.nombreCliente}</span>
+                                                        </p>
+                                                        <p className="text-sm text-gray-600">
+                                                            <FaCut className="inline text-primary mr-1 text-xs"/>
+                                                            {cita.servicios}
+                                                        </p>
+                                                    </div>
+
+                                                    {/* Total y comisión */}
+                                                    <div className="flex items-center justify-between border-t pt-2">
+                                                        <p className="text-lg font-bold text-primary">
+                                                            <FaMoneyBillWave className="inline mr-1 text-sm"/>
+                                                            ${cita.total?.toLocaleString()}
+                                                        </p>
+                                                        {user.comision && cita.estado === 'completada' && (
+                                                            <p className="text-sm text-green-600 font-semibold">
+                                                                +${((cita.total * user.comision / 100) || 0).toLocaleString()}
+                                                            </p>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Botones de acción compactos */}
+                                                    <div className="flex gap-2">
                                                         {cita.estado === 'pendiente' && (
                                                             <>
                                                                 <button
                                                                     onClick={() => handleConfirmarCita(cita.idCita)}
                                                                     disabled={loading}
-                                                                    className="btn-primary flex items-center justify-center space-x-2 px-4 py-2 whitespace-nowrap"
+                                                                    className="btn-primary flex-1 flex items-center justify-center space-x-1 px-3 py-2 text-sm"
                                                                 >
-                                                                    <FaCheck/>
+                                                                    <FaCheck size={14}/>
                                                                     <span>Confirmar</span>
                                                                 </button>
                                                                 <button
                                                                     onClick={() => handleRechazarCita(cita.idCita)}
                                                                     disabled={loading}
-                                                                    className="btn-outline border-red-500 text-red-500 hover:bg-red-500 hover:text-white flex items-center justify-center space-x-2 px-4 py-2"
+                                                                    className="btn-outline border-red-500 text-red-500 hover:bg-red-500 hover:text-white flex-1 flex items-center justify-center space-x-1 px-3 py-2 text-sm"
                                                                 >
-                                                                    <FaBan/>
+                                                                    <FaBan size={14}/>
                                                                     <span>Rechazar</span>
                                                                 </button>
                                                             </>
@@ -615,16 +606,15 @@ export default function BarberoDashboard() {
                                                             <button
                                                                 onClick={() => handleCompletarCita(cita.idCita)}
                                                                 disabled={loading}
-                                                                className="btn-gold flex items-center justify-center space-x-2 px-4 py-2 whitespace-nowrap"
+                                                                className="btn-gold w-full flex items-center justify-center space-x-1 px-3 py-2 text-sm"
                                                             >
-                                                                <FaCheckCircle/>
+                                                                <FaCheckCircle size={14}/>
                                                                 <span>Completar</span>
                                                             </button>
                                                         )}
                                                         {cita.estado === 'completada' && (
-                                                            <div
-                                                                className="bg-green-100 text-green-800 px-4 py-2 rounded-lg font-semibold text-center">
-                                                                <FaCheckCircle className="inline mr-2"/>
+                                                            <div className="bg-green-100 text-green-800 w-full px-3 py-2 rounded-lg font-semibold text-center text-sm">
+                                                                <FaCheckCircle className="inline mr-1" size={14}/>
                                                                 Finalizada
                                                             </div>
                                                         )}

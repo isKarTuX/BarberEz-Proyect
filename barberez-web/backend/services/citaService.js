@@ -28,7 +28,7 @@ class CitaService {
                 params.push(estado);
             }
 
-            query += ' GROUP BY c.idCita ORDER BY c.fecha DESC, c.horaIn DESC';
+            query += ' GROUP BY c.idCita ORDER BY c.fecha DESC, c.horaIn ASC';
 
             const [citas] = await pool.execute(query, params);
             return citas;
@@ -70,7 +70,12 @@ class CitaService {
                 params.push(estado);
             }
 
-            query += ' GROUP BY c.idCita ORDER BY c.fecha DESC, c.horaIn DESC';
+            // Ordenar por fecha y hora: si hay filtro de fecha específica, priorizar por hora ASC (más temprano primero)
+            if (fecha) {
+                query += ' GROUP BY c.idCita ORDER BY c.horaIn ASC';
+            } else {
+                query += ' GROUP BY c.idCita ORDER BY c.fecha DESC, c.horaIn ASC';
+            }
 
             const [citas] = await pool.execute(query, params);
             return citas;
@@ -97,15 +102,18 @@ class CitaService {
                 throw new Error('No se pueden agendar citas en fechas pasadas');
             }
 
-            // Si es hoy, validar que la hora no haya pasado
+            // Si es hoy, validar que la hora no haya pasado (con 30 min de margen)
             const ahora = new Date();
             if (fechaCita.toDateString() === hoy.toDateString()) {
                 const [horaStr, minutoStr] = horaIn.split(':');
                 const horaCita = new Date();
                 horaCita.setHours(parseInt(horaStr), parseInt(minutoStr), 0, 0);
 
-                if (horaCita <= ahora) {
-                    throw new Error('No se pueden agendar citas en horarios que ya pasaron');
+                // Agregar 30 minutos de margen al tiempo actual
+                const tiempoMinimo = new Date(ahora.getTime() + (30 * 60 * 1000));
+
+                if (horaCita < tiempoMinimo) {
+                    throw new Error('No se pueden agendar citas en horarios que ya pasaron o con menos de 30 minutos de anticipación');
                 }
             }
 
