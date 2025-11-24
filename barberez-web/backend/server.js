@@ -8,6 +8,7 @@ import citaRoutes from './routes/citaRoutes.js';
 import barberoRoutes from './routes/barberoRoutes.js';
 import servicioRoutes from './routes/servicioRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
+import pagoRoutes from './routes/pagoRoutes.js';
 
 // Importar base de datos
 import './config/database.js';
@@ -60,7 +61,8 @@ app.get('/', (req, res) => {
             citas: '/api/citas',
             barberos: '/api/barberos',
             servicios: '/api/servicios',
-            admin: '/api/admin'
+            admin: '/api/admin',
+            pagos: '/api/pagos'
         }
     });
 });
@@ -71,6 +73,7 @@ app.use('/api/citas', citaRoutes);
 app.use('/api/barberos', barberoRoutes);
 app.use('/api/servicios', servicioRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/pagos', pagoRoutes);
 
 // =========================================
 // MANEJO DE ERRORES
