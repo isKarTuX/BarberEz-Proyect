@@ -32,8 +32,13 @@ export const citasAPI = {
     getCitasCliente: (idCliente, estado = null) =>
         api.get(`/citas/cliente/${idCliente}${estado ? `?estado=${estado}` : ''}`),
 
-    getCitasBarbero: (idBarbero, estado = null) =>
-        api.get(`/citas/barbero/${idBarbero}${estado ? `?estado=${estado}` : ''}`),
+    getCitasBarbero: (idBarbero, estado = null, fecha = null) => {
+        const params = new URLSearchParams();
+        if (estado) params.append('estado', estado);
+        if (fecha) params.append('fecha', fecha);
+        const queryString = params.toString();
+        return api.get(`/citas/barbero/${idBarbero}${queryString ? `?${queryString}` : ''}`);
+    },
 
     agendarCita: (citaData) =>
         api.post('/citas', citaData),

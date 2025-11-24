@@ -130,7 +130,7 @@ export default function BarberoDashboard() {
     const cargarCitasHoy = async () => {
         try {
             const hoy = new Date().toISOString().split('T')[0];
-            const response = await citasAPI.getCitasBarbero(user.idUsuario, hoy);
+            const response = await citasAPI.getCitasBarbero(user.idUsuario, null, hoy);
             setCitasHoy(response.data.data);
         } catch (error) {
             console.error('Error al cargar citas:', error);

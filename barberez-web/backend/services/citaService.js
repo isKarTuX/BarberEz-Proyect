@@ -38,7 +38,7 @@ class CitaService {
     }
 
     // Obtener citas de un barbero
-    static async getCitasBarbero(idBarbero, estado = null) {
+    static async getCitasBarbero(idBarbero, estado = null, fecha = null) {
         try {
             let query = `
                 SELECT 
@@ -59,6 +59,11 @@ class CitaService {
             `;
 
             const params = [idBarbero];
+
+            if (fecha) {
+                query += ' AND c.fecha = ?';
+                params.push(fecha);
+            }
 
             if (estado) {
                 query += ' AND c.estado = ?';
@@ -83,6 +88,27 @@ class CitaService {
         try {
             await connection.beginTransaction();
 
+            // Validar que la fecha no sea en el pasado
+            const fechaCita = new Date(fecha + 'T00:00:00');
+            const hoy = new Date();
+            hoy.setHours(0, 0, 0, 0);
+
+            if (fechaCita < hoy) {
+                throw new Error('No se pueden agendar citas en fechas pasadas');
+            }
+
+            // Si es hoy, validar que la hora no haya pasado
+            const ahora = new Date();
+            if (fechaCita.toDateString() === hoy.toDateString()) {
+                const [horaStr, minutoStr] = horaIn.split(':');
+                const horaCita = new Date();
+                horaCita.setHours(parseInt(horaStr), parseInt(minutoStr), 0, 0);
+
+                if (horaCita <= ahora) {
+                    throw new Error('No se pueden agendar citas en horarios que ya pasaron');
+                }
+            }
+
             // Verificar disponibilidad del barbero
             const [existente] = await connection.execute(
                 `SELECT idCita FROM cita 
@@ -92,7 +118,7 @@ class CitaService {
             );
 
             if (existente.length > 0) {
-                throw new Error('El barbero ya tiene una cita a esa hora');
+                throw new Error('El barbero ya tiene una cita a esa hora. Por favor, selecciona otro horario');
             }
 
             // Crear la cita
@@ -206,6 +232,7 @@ class CitaService {
     // Obtener horarios disponibles de un barbero
     static async getHorariosDisponibles(idBarbero, fecha) {
         try {
+            // Obtener horarios ocupados
             const [ocupados] = await pool.execute(
                 `SELECT horaIn FROM cita 
                  WHERE idBarbero = ? AND fecha = ? 
@@ -213,7 +240,44 @@ class CitaService {
                 [idBarbero, fecha]
             );
 
-            return ocupados.map(h => h.horaIn);
+            const horariosOcupados = ocupados.map(h => h.horaIn);
+
+            // Si es hoy, también marcar como no disponibles los horarios que ya pasaron
+            const fechaCita = new Date(fecha + 'T00:00:00');
+            const hoy = new Date();
+            hoy.setHours(0, 0, 0, 0);
+
+            const horariosNoDisponibles = [...horariosOcupados];
+
+            if (fechaCita.toDateString() === hoy.toDateString()) {
+                const ahora = new Date();
+
+                // Generar horarios típicos de una barbería (8:00 AM - 8:00 PM)
+                const horariosDelDia = [];
+                for (let hora = 8; hora <= 20; hora++) {
+                    for (let minuto = 0; minuto < 60; minuto += 30) {
+                        const horaStr = `${hora.toString().padStart(2, '0')}:${minuto.toString().padStart(2, '0')}`;
+                        horariosDelDia.push(horaStr);
+                    }
+                }
+
+                // Marcar como no disponibles los horarios que ya pasaron
+                horariosDelDia.forEach(horario => {
+                    const [horaStr, minutoStr] = horario.split(':');
+                    const horaCita = new Date();
+                    horaCita.setHours(parseInt(horaStr), parseInt(minutoStr), 0, 0);
+
+                    if (horaCita <= ahora && !horariosNoDisponibles.includes(horario)) {
+                        horariosNoDisponibles.push(horario);
+                    }
+                });
+            }
+
+            return {
+                horariosOcupados: horariosOcupados,
+                horariosPasados: horariosNoDisponibles.filter(h => !horariosOcupados.includes(h)),
+                todosNoDisponibles: horariosNoDisponibles
+            };
         } catch (error) {
             throw error;
         }

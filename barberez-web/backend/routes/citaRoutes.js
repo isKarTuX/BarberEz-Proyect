@@ -27,9 +27,13 @@ router.get('/cliente/:idCliente', async (req, res) => {
 router.get('/barbero/:idBarbero', async (req, res) => {
     try {
         const { idBarbero } = req.params;
-        const { estado } = req.query;
+        const { estado, fecha } = req.query;
 
-        const citas = await CitaService.getCitasBarbero(parseInt(idBarbero), estado);
+        const citas = await CitaService.getCitasBarbero(
+            parseInt(idBarbero),
+            estado,
+            fecha
+        );
 
         res.json({
             success: true,
