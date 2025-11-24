@@ -10,6 +10,9 @@ import { useNavigate } from 'react-router-dom';
 import SelectBusqueda from '../components/SelectBusqueda';
 import Toast from '../components/Toast';
 import ConfirmModal from '../components/ConfirmModal';
+import LayoutControl from '../components/LayoutControl';
+import CitaCard from '../components/CitaCard';
+import Pagination from '../components/Pagination';
 
 export default function ClienteDashboard() {
     const { user, logout } = useAuth();
@@ -31,6 +34,13 @@ export default function ClienteDashboard() {
     const [citasPendientes, setCitasPendientes] = useState([]);
     const [historialCitas, setHistorialCitas] = useState([]);
     const [loading, setLoading] = useState(false);
+
+    // Layout y paginación
+    const [layoutColumns, setLayoutColumns] = useState(2);
+    const [layoutSize, setLayoutSize] = useState('normal');
+    const [currentPagePendientes, setCurrentPagePendientes] = useState(1);
+    const [currentPageHistorial, setCurrentPageHistorial] = useState(1);
+    const [itemsPerPage, setItemsPerPage] = useState(12);
 
     // Toast notifications
     const [toast, setToast] = useState(null);
@@ -77,6 +87,71 @@ export default function ClienteDashboard() {
         busqueda: ''
     });
     const [mostrarFiltros, setMostrarFiltros] = useState(false);
+
+    // Ajustar items por página según layout
+    useEffect(() => {
+        let items = 12;
+        if (layoutColumns === 1) {
+            items = layoutSize === 'compact' ? 15 : layoutSize === 'comfortable' ? 8 : 10;
+        } else if (layoutColumns === 2) {
+            items = layoutSize === 'compact' ? 20 : layoutSize === 'comfortable' ? 12 : 16;
+        } else if (layoutColumns === 3) {
+            items = layoutSize === 'compact' ? 30 : layoutSize === 'comfortable' ? 18 : 24;
+        }
+        setItemsPerPage(items);
+    }, [layoutColumns, layoutSize]);
+
+    // Funciones de paginación
+    const paginate = (items, currentPage) => {
+        const startIndex = (currentPage - 1) * itemsPerPage;
+        const endIndex = startIndex + itemsPerPage;
+        return items.slice(startIndex, endIndex);
+    };
+
+    const getGridClass = () => {
+        switch (layoutColumns) {
+            case 1:
+                return 'grid-cols-1';
+            case 2:
+                return 'grid-cols-1 lg:grid-cols-2';
+            case 3:
+                return 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3';
+            default:
+                return 'grid-cols-1 lg:grid-cols-2';
+        }
+    };
+
+    const getTotalPages = (totalItems) => Math.ceil(totalItems / itemsPerPage) || 1;
+
+    const getCitasPendientesPaginadas = () => paginate(citasPendientes, currentPagePendientes);
+
+    const getHistorialFiltrado = () => {
+        let citas = historialCitas.filter(c => c.estado !== 'pendiente');
+
+        if (filtros.fechaInicio) {
+            citas = citas.filter(c => c.fecha >= filtros.fechaInicio);
+        }
+        if (filtros.fechaFin) {
+            citas = citas.filter(c => c.fecha <= filtros.fechaFin);
+        }
+        if (filtros.estado) {
+            citas = citas.filter(c => c.estado === filtros.estado);
+        }
+        if (filtros.idBarbero) {
+            citas = citas.filter(c => c.idBarbero === parseInt(filtros.idBarbero));
+        }
+        if (filtros.busqueda) {
+            const busqueda = filtros.busqueda.toLowerCase();
+            citas = citas.filter(c =>
+                c.nombreBarbero?.toLowerCase().includes(busqueda) ||
+                c.servicios?.toLowerCase().includes(busqueda)
+            );
+        }
+
+        return citas;
+    };
+
+    const getHistorialPaginado = () => paginate(getHistorialFiltrado(), currentPageHistorial);
 
     useEffect(() => {
         cargarBarberos();
