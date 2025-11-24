@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { authAPI } from '../services/api';
-import { Scissors, Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff } from 'lucide-react';
 
 export default function Register() {
     const [formData, setFormData] = useState({
@@ -73,8 +73,12 @@ export default function Register() {
             <div className="max-w-md w-full bg-white rounded-2xl shadow-2xl p-8">
                 {/* Logo y Título */}
                 <div className="text-center mb-8">
-                    <div className="inline-flex items-center justify-center w-16 h-16 bg-primary rounded-full mb-4">
-                        <Scissors className="w-8 h-8 text-white" />
+                    <div className="mb-4">
+                        <img
+                            src="/images/logo.png"
+                            alt="BarberEz Logo"
+                            className="w-20 h-20 mx-auto rounded-full shadow-2xl border-4 border-white object-cover"
+                        />
                     </div>
                     <h1 className="text-3xl font-bold text-gray-800">Crear Cuenta</h1>
                     <p className="text-gray-600 mt-2">Únete a BarberEz</p>
