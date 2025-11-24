@@ -1,0 +1,176 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: #F7FAFC;
+}
+
+@layer components {
+  /* Botones principales con tema retro */
+  .btn-primary {
+    @apply bg-gradient-to-r from-primary to-secondary hover:from-primary-dark hover:to-secondary-dark
+           text-white font-semibold py-3 px-6 rounded-lg transition-all duration-300
+           shadow-lg hover:shadow-xl transform hover:-translate-y-0.5;
+  }
+
+  .btn-secondary {
+    @apply bg-gradient-to-r from-secondary to-primary hover:from-secondary-dark hover:to-primary-dark
+           text-white font-semibold py-3 px-6 rounded-lg transition-all duration-300
+           shadow-lg hover:shadow-xl;
+  }
+
+  .btn-outline {
+    @apply border-2 border-primary text-primary hover:bg-primary hover:text-white
+           font-semibold py-2 px-4 rounded-lg transition-all duration-200;
+  }
+
+  .btn-gold {
+    @apply bg-gradient-to-r from-gold to-yellow-500 hover:from-yellow-600 hover:to-yellow-700
+           text-white font-bold py-3 px-6 rounded-lg transition-all duration-300
+           shadow-lg hover:shadow-xl;
+  }
+
+  /* Inputs con estilo retro */
+  .input-field {
+    @apply w-full px-4 py-3 border-2 border-gray-300 rounded-lg
+           focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent
+           transition-all duration-200 bg-white;
+  }
+
+  /* Cards con efecto de profundidad */
+  .card {
+    @apply bg-white rounded-xl shadow-md hover:shadow-xl p-6
+           transition-all duration-300 border border-gray-100;
+  }
+
+  .card-retro {
+    @apply bg-gradient-to-br from-white to-light rounded-xl shadow-lg p-6
+           border-2 border-primary/20 relative overflow-hidden;
+  }
+
+  /* Headers con estilo barbería */
+  .header-retro {
+    @apply bg-gradient-to-r from-primary via-secondary to-primary
+           text-white shadow-lg relative;
+  }
+
+  /* Badges de estado */
+  .badge {
+    @apply px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider;
+  }
+
+  .badge-success {
+    @apply bg-gradient-to-r from-green-500 to-green-600 text-white shadow-md;
+  }
+
+  .badge-warning {
+    @apply bg-gradient-to-r from-yellow-400 to-yellow-500 text-white shadow-md;
+  }
+
+  .badge-danger {
+    @apply bg-gradient-to-r from-red-500 to-red-600 text-white shadow-md;
+  }
+
+  .badge-info {
+    @apply bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-md;
+  }
+
+  .badge-primary {
+    @apply bg-gradient-to-r from-primary to-secondary text-white shadow-md;
+  }
+
+  /* Tablas estilizadas */
+  .table-retro {
+    @apply w-full border-collapse;
+  }
+
+  .table-retro thead {
+    @apply bg-gradient-to-r from-primary to-secondary text-white;
+  }
+
+  .table-retro th {
+    @apply px-6 py-4 text-left text-xs font-bold uppercase tracking-wider;
+  }
+
+  .table-retro td {
+    @apply px-6 py-4 text-sm text-gray-700 border-b border-gray-200;
+  }
+
+  .table-retro tbody tr {
+    @apply hover:bg-primary/5 transition-colors duration-150;
+  }
+
+  /* Stats cards */
+  .stat-card {
+    @apply bg-gradient-to-br from-white to-primary/5 rounded-xl p-6
+           border-l-4 border-primary shadow-md hover:shadow-lg transition-all duration-300;
+  }
+
+  /* Filtros y búsqueda */
+  .filter-container {
+    @apply bg-white rounded-lg shadow-md p-4 mb-6 border-t-4 border-primary;
+  }
+
+  /* Animaciones */
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes slideInRight {
+    from {
+      opacity: 0;
+      transform: translateX(100px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  .animate-fadeIn {
+    animation: fadeIn 0.3s ease-out;
+  }
+
+  .animate-slideInRight {
+    animation: slideInRight 0.3s ease-out;
+  }
+
+  /* Scrollbar personalizado */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    @apply bg-gray-100 rounded;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-primary rounded hover:bg-primary-dark;
+  }
+
+  /* Logo container */
+  .logo-container {
+    @apply w-16 h-16 rounded-full bg-gradient-to-br from-primary to-secondary
+           flex items-center justify-center shadow-lg border-4 border-white;
+  }
+}
+
+/* Estilos para imágenes de fondo */
+.bg-barber-pattern {
+  background-color: #F7FAFC;
+  background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%239F7AEA' fill-opacity='0.1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+}
+
