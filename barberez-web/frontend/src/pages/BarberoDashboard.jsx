@@ -5,12 +5,14 @@ import {
     FaCut, FaSignOutAlt, FaCalendarDay, FaClipboardList, FaChartLine,
     FaClock, FaMoneyBillWave, FaFilter, FaTimes, FaSearch, FaCheckCircle,
     FaTimesCircle, FaHourglassHalf, FaCheck, FaBan, FaInfoCircle,
-    FaCalendarAlt, FaUser, FaDollarSign, FaChevronDown, FaChevronUp
+    FaCalendarAlt, FaUser, FaDollarSign, FaChevronDown, FaChevronUp, FaSortAmountDown, FaSortAmountUp
 } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
 import Toast from '../components/Toast';
 import ConfirmModal from '../components/ConfirmModal';
 import ToggleSwitch from '../components/ToggleSwitch';
+import LayoutControl from '../components/LayoutControl';
+import CitaCard from '../components/CitaCard';
 
 export default function BarberoDashboard() {
     const {user, logout} = useAuth();
@@ -24,6 +26,14 @@ export default function BarberoDashboard() {
     const [estadisticas, setEstadisticas] = useState(null);
     const [loading, setLoading] = useState(false);
     const [serviciosDisponibles, setServiciosDisponibles] = useState([]);
+
+    // Layout y visualización
+    const [layoutColumns, setLayoutColumns] = useState(2);
+    const [layoutSize, setLayoutSize] = useState('normal');
+
+    // Filtros para "Hoy"
+    const [filtroHoyEstado, setFiltroHoyEstado] = useState('todas'); // 'todas', 'pendiente', 'confirmada', 'completada'
+    const [ordenHoy, setOrdenHoy] = useState('asc'); // 'asc' o 'desc'
 
     // Toast notifications
     const [toast, setToast] = useState(null);
@@ -134,6 +144,41 @@ export default function BarberoDashboard() {
             setCitasHoy(response.data.data);
         } catch (error) {
             console.error('Error al cargar citas:', error);
+        }
+    };
+
+    // Función para filtrar y ordenar citas de hoy
+    const getCitasHoyFiltradas = () => {
+        let citas = [...citasHoy];
+
+        // Filtrar por estado
+        if (filtroHoyEstado !== 'todas') {
+            citas = citas.filter(c => c.estado === filtroHoyEstado);
+        }
+
+        // Ordenar por hora
+        citas.sort((a, b) => {
+            const horaA = a.horaIn || '00:00';
+            const horaB = b.horaIn || '00:00';
+            return ordenHoy === 'asc'
+                ? horaA.localeCompare(horaB)
+                : horaB.localeCompare(horaA);
+        });
+
+        return citas;
+    };
+
+    // Función para obtener el grid class según las columnas
+    const getGridClass = () => {
+        switch (layoutColumns) {
+            case 1:
+                return 'grid-cols-1';
+            case 2:
+                return 'grid-cols-1 lg:grid-cols-2';
+            case 3:
+                return 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3';
+            default:
+                return 'grid-cols-1 lg:grid-cols-2';
         }
     };
 
@@ -508,119 +553,147 @@ export default function BarberoDashboard() {
 
                     {/* CITAS DE HOY */}
                     {activeTab === 'hoy' && (
-                        <div className="space-y-6 animate-fadeIn">
+                        <div className="space-y-4 animate-fadeIn">
+                            {/* Header */}
                             <div className="card">
-                                <div className="flex items-center space-x-3 mb-6">
-                                    <FaCalendarDay className="w-7 h-7 text-primary"/>
-                                    <h2 className="text-2xl font-bold text-gray-800">
-                                        Citas de Hoy - {new Date().toLocaleDateString('es-CO', {
-                                        weekday: 'long',
-                                        day: 'numeric',
-                                        month: 'long'
-                                    })}
-                                    </h2>
+                                <div className="flex items-center justify-between mb-4">
+                                    <div className="flex items-center space-x-3">
+                                        <FaCalendarDay className="w-7 h-7 text-primary"/>
+                                        <h2 className="text-2xl font-bold text-gray-800">
+                                            Citas de Hoy
+                                        </h2>
+                                    </div>
+                                    <div className="text-sm text-gray-600">
+                                        {new Date().toLocaleDateString('es-CO', {
+                                            weekday: 'long',
+                                            day: 'numeric',
+                                            month: 'long',
+                                            year: 'numeric'
+                                        })}
+                                    </div>
                                 </div>
 
-                                {citasHoy.length === 0 ? (
+                                {/* Filtros Deslizables */}
+                                <div className="bg-gray-50 rounded-lg p-3 mb-4 border border-gray-200">
+                                    <div className="flex flex-wrap items-center gap-3">
+                                        {/* Filtro por Estado */}
+                                        <div className="flex items-center space-x-2">
+                                            <span className="text-sm font-semibold text-gray-700">Estado:</span>
+                                            <div className="flex bg-white rounded-lg shadow-sm overflow-hidden">
+                                                <button
+                                                    onClick={() => setFiltroHoyEstado('todas')}
+                                                    className={`px-3 py-1.5 text-sm font-medium transition-all ${
+                                                        filtroHoyEstado === 'todas'
+                                                            ? 'bg-gray-600 text-white'
+                                                            : 'text-gray-600 hover:bg-gray-100'
+                                                    }`}
+                                                >
+                                                    Todas
+                                                </button>
+                                                <button
+                                                    onClick={() => setFiltroHoyEstado('pendiente')}
+                                                    className={`px-3 py-1.5 text-sm font-medium transition-all ${
+                                                        filtroHoyEstado === 'pendiente'
+                                                            ? 'bg-yellow-500 text-white'
+                                                            : 'text-gray-600 hover:bg-gray-100'
+                                                    }`}
+                                                >
+                                                    Pendientes
+                                                    <span className="ml-1.5 px-1.5 py-0.5 bg-white bg-opacity-30 rounded text-xs">
+                                                        {citasHoy.filter(c => c.estado === 'pendiente').length}
+                                                    </span>
+                                                </button>
+                                                <button
+                                                    onClick={() => setFiltroHoyEstado('confirmada')}
+                                                    className={`px-3 py-1.5 text-sm font-medium transition-all ${
+                                                        filtroHoyEstado === 'confirmada'
+                                                            ? 'bg-blue-500 text-white'
+                                                            : 'text-gray-600 hover:bg-gray-100'
+                                                    }`}
+                                                >
+                                                    Confirmadas
+                                                    <span className="ml-1.5 px-1.5 py-0.5 bg-white bg-opacity-30 rounded text-xs">
+                                                        {citasHoy.filter(c => c.estado === 'confirmada').length}
+                                                    </span>
+                                                </button>
+                                                <button
+                                                    onClick={() => setFiltroHoyEstado('completada')}
+                                                    className={`px-3 py-1.5 text-sm font-medium transition-all ${
+                                                        filtroHoyEstado === 'completada'
+                                                            ? 'bg-green-500 text-white'
+                                                            : 'text-gray-600 hover:bg-gray-100'
+                                                    }`}
+                                                >
+                                                    Completadas
+                                                    <span className="ml-1.5 px-1.5 py-0.5 bg-white bg-opacity-30 rounded text-xs">
+                                                        {citasHoy.filter(c => c.estado === 'completada').length}
+                                                    </span>
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {/* Ordenamiento */}
+                                        <div className="flex items-center space-x-2">
+                                            <span className="text-sm font-semibold text-gray-700">Orden:</span>
+                                            <button
+                                                onClick={() => setOrdenHoy(ordenHoy === 'asc' ? 'desc' : 'asc')}
+                                                className="flex items-center space-x-1 px-3 py-1.5 bg-white rounded-lg shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 transition-all"
+                                            >
+                                                {ordenHoy === 'asc' ? (
+                                                    <>
+                                                        <FaSortAmountDown size={14} />
+                                                        <span>Temprano → Tarde</span>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <FaSortAmountUp size={14} />
+                                                        <span>Tarde → Temprano</span>
+                                                    </>
+                                                )}
+                                            </button>
+                                        </div>
+
+                                        {/* Contador */}
+                                        <div className="ml-auto text-sm font-semibold text-gray-700">
+                                            {getCitasHoyFiltradas().length} cita{getCitasHoyFiltradas().length !== 1 ? 's' : ''}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Control de Layout */}
+                            <LayoutControl
+                                columns={layoutColumns}
+                                onColumnsChange={setLayoutColumns}
+                                size={layoutSize}
+                                onSizeChange={setLayoutSize}
+                            />
+
+                            {/* Lista de Citas */}
+                            <div className="card">
+                                {getCitasHoyFiltradas().length === 0 ? (
                                     <div className="text-center py-12">
                                         <FaCalendarDay className="w-16 h-16 text-gray-300 mx-auto mb-4"/>
-                                        <p className="text-gray-500 text-lg">No tienes citas programadas para hoy</p>
+                                        <p className="text-gray-500 text-lg">
+                                            {filtroHoyEstado === 'todas'
+                                                ? 'No tienes citas programadas para hoy'
+                                                : `No tienes citas ${filtroHoyEstado}s para hoy`
+                                            }
+                                        </p>
                                     </div>
                                 ) : (
-                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                                        {citasHoy.map(cita => (
-                                            <div
+                                    <div className={`grid ${getGridClass()} gap-3`}>
+                                        {getCitasHoyFiltradas().map(cita => (
+                                            <CitaCard
                                                 key={cita.idCita}
-                                                className={`border-2 rounded-xl p-4 transition-all ${
-                                                    cita.estado === 'completada' ? 'border-green-300 bg-green-50' :
-                                                        cita.estado === 'confirmada' ? 'border-primary/30 bg-primary/5' :
-                                                            cita.estado === 'pendiente' ? 'border-yellow-300 bg-yellow-50' :
-                                                                'border-gray-200'
-                                                }`}
-                                            >
-                                                <div className="space-y-3">
-                                                    {/* Header compacto con hora y estado */}
-                                                    <div className="flex items-center justify-between">
-                                                        <span className="text-2xl font-bold text-primary flex items-center">
-                                                            <FaClock className="mr-2"/>
-                                                            {cita.horaIn?.substring(0, 5)}
-                                                        </span>
-                                                        <span className={`badge text-xs ${
-                                                            cita.estado === 'completada' ? 'badge-success' :
-                                                                cita.estado === 'confirmada' ? 'badge-info' :
-                                                                    cita.estado === 'pendiente' ? 'badge-warning' :
-                                                                        'badge-danger'
-                                                        }`}>
-                                                            {cita.estado}
-                                                        </span>
-                                                    </div>
-
-                                                    {/* Información del cliente y servicios */}
-                                                    <div className="space-y-2">
-                                                        <p className="text-sm">
-                                                            <FaUser className="inline text-primary mr-1 text-xs"/>
-                                                            <span className="font-semibold">{cita.nombreCliente}</span>
-                                                        </p>
-                                                        <p className="text-sm text-gray-600">
-                                                            <FaCut className="inline text-primary mr-1 text-xs"/>
-                                                            {cita.servicios}
-                                                        </p>
-                                                    </div>
-
-                                                    {/* Total y comisión */}
-                                                    <div className="flex items-center justify-between border-t pt-2">
-                                                        <p className="text-lg font-bold text-primary">
-                                                            <FaMoneyBillWave className="inline mr-1 text-sm"/>
-                                                            ${cita.total?.toLocaleString()}
-                                                        </p>
-                                                        {user.comision && cita.estado === 'completada' && (
-                                                            <p className="text-sm text-green-600 font-semibold">
-                                                                +${((cita.total * user.comision / 100) || 0).toLocaleString()}
-                                                            </p>
-                                                        )}
-                                                    </div>
-
-                                                    {/* Botones de acción compactos */}
-                                                    <div className="flex gap-2">
-                                                        {cita.estado === 'pendiente' && (
-                                                            <>
-                                                                <button
-                                                                    onClick={() => handleConfirmarCita(cita.idCita)}
-                                                                    disabled={loading}
-                                                                    className="btn-primary flex-1 flex items-center justify-center space-x-1 px-3 py-2 text-sm"
-                                                                >
-                                                                    <FaCheck size={14}/>
-                                                                    <span>Confirmar</span>
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => handleRechazarCita(cita.idCita)}
-                                                                    disabled={loading}
-                                                                    className="btn-outline border-red-500 text-red-500 hover:bg-red-500 hover:text-white flex-1 flex items-center justify-center space-x-1 px-3 py-2 text-sm"
-                                                                >
-                                                                    <FaBan size={14}/>
-                                                                    <span>Rechazar</span>
-                                                                </button>
-                                                            </>
-                                                        )}
-                                                        {cita.estado === 'confirmada' && (
-                                                            <button
-                                                                onClick={() => handleCompletarCita(cita.idCita)}
-                                                                disabled={loading}
-                                                                className="btn-gold w-full flex items-center justify-center space-x-1 px-3 py-2 text-sm"
-                                                            >
-                                                                <FaCheckCircle size={14}/>
-                                                                <span>Completar</span>
-                                                            </button>
-                                                        )}
-                                                        {cita.estado === 'completada' && (
-                                                            <div className="bg-green-100 text-green-800 w-full px-3 py-2 rounded-lg font-semibold text-center text-sm">
-                                                                <FaCheckCircle className="inline mr-1" size={14}/>
-                                                                Finalizada
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            </div>
+                                                cita={cita}
+                                                size={layoutSize}
+                                                onConfirmar={handleConfirmarCita}
+                                                onRechazar={handleRechazarCita}
+                                                onCompletar={handleCompletarCita}
+                                                loading={loading}
+                                                userComision={user.comision}
+                                            />
                                         ))}
                                     </div>
                                 )}
