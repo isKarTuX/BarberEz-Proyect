@@ -13,6 +13,7 @@ import ConfirmModal from '../components/ConfirmModal';
 import ToggleSwitch from '../components/ToggleSwitch';
 import LayoutControl from '../components/LayoutControl';
 import CitaCard from '../components/CitaCard';
+import Pagination from '../components/Pagination';
 
 export default function BarberoDashboard() {
     const {user, logout} = useAuth();
@@ -30,6 +31,13 @@ export default function BarberoDashboard() {
     // Layout y visualización
     const [layoutColumns, setLayoutColumns] = useState(2);
     const [layoutSize, setLayoutSize] = useState('normal');
+
+    // Paginación
+    const [currentPageHoy, setCurrentPageHoy] = useState(1);
+    const [currentPagePendientes, setCurrentPagePendientes] = useState(1);
+    const [currentPageConfirmadas, setCurrentPageConfirmadas] = useState(1);
+    const [currentPageHistorial, setCurrentPageHistorial] = useState(1);
+    const [itemsPerPage, setItemsPerPage] = useState(12); // Ajustable según columnas y tamaño
 
     // Filtros para "Hoy"
     const [filtroHoyEstado, setFiltroHoyEstado] = useState('todas'); // 'todas', 'pendiente', 'confirmada', 'completada'
@@ -181,6 +189,64 @@ export default function BarberoDashboard() {
                 return 'grid-cols-1 lg:grid-cols-2';
         }
     };
+
+    // Ajustar items por página según columnas y tamaño
+    useEffect(() => {
+        let items = 12; // Default
+
+        // Ajustar según columnas
+        if (layoutColumns === 1) {
+            items = layoutSize === 'compact' ? 15 : layoutSize === 'comfortable' ? 8 : 10;
+        } else if (layoutColumns === 2) {
+            items = layoutSize === 'compact' ? 20 : layoutSize === 'comfortable' ? 12 : 16;
+        } else if (layoutColumns === 3) {
+            items = layoutSize === 'compact' ? 30 : layoutSize === 'comfortable' ? 18 : 24;
+        }
+
+        setItemsPerPage(items);
+    }, [layoutColumns, layoutSize]);
+
+    // Función de paginación genérica
+    const paginate = (items, currentPage) => {
+        const startIndex = (currentPage - 1) * itemsPerPage;
+        const endIndex = startIndex + itemsPerPage;
+        return items.slice(startIndex, endIndex);
+    };
+
+    // Obtener items paginados para cada sección
+    const getCitasHoyPaginadas = () => paginate(getCitasHoyFiltradas(), currentPageHoy);
+    const getCitasPendientesPaginadas = () => paginate(citasPendientes, currentPagePendientes);
+    const getCitasConfirmadasPaginadas = () => paginate(citasConfirmadas, currentPageConfirmadas);
+
+    // Función para obtener citas filtradas del historial
+    const getCitasHistorialFiltradas = () => {
+        let citas = [...todasCitas];
+
+        // Aplicar filtros si existen
+        if (filtros?.fechaInicio) {
+            citas = citas.filter(c => c.fecha >= filtros.fechaInicio);
+        }
+        if (filtros?.fechaFin) {
+            citas = citas.filter(c => c.fecha <= filtros.fechaFin);
+        }
+        if (filtros?.estado) {
+            citas = citas.filter(c => c.estado === filtros.estado);
+        }
+        if (filtros?.busqueda) {
+            const busqueda = filtros.busqueda.toLowerCase();
+            citas = citas.filter(c =>
+                c.nombreCliente?.toLowerCase().includes(busqueda) ||
+                c.servicios?.toLowerCase().includes(busqueda)
+            );
+        }
+
+        return citas;
+    };
+
+    const getCitasHistorialPaginadas = () => paginate(getCitasHistorialFiltradas(), currentPageHistorial);
+
+    // Calcular total de páginas
+    const getTotalPages = (totalItems) => Math.ceil(totalItems / itemsPerPage) || 1;
 
     const cargarCitasPendientes = async () => {
         try {
@@ -682,20 +748,31 @@ export default function BarberoDashboard() {
                                         </p>
                                     </div>
                                 ) : (
-                                    <div className={`grid ${getGridClass()} gap-3`}>
-                                        {getCitasHoyFiltradas().map(cita => (
-                                            <CitaCard
-                                                key={cita.idCita}
-                                                cita={cita}
-                                                size={layoutSize}
-                                                onConfirmar={handleConfirmarCita}
-                                                onRechazar={handleRechazarCita}
-                                                onCompletar={handleCompletarCita}
-                                                loading={loading}
-                                                userComision={user.comision}
-                                            />
-                                        ))}
-                                    </div>
+                                    <>
+                                        <div className={`grid ${getGridClass()} gap-3`}>
+                                            {getCitasHoyPaginadas().map(cita => (
+                                                <CitaCard
+                                                    key={cita.idCita}
+                                                    cita={cita}
+                                                    size={layoutSize}
+                                                    onConfirmar={handleConfirmarCita}
+                                                    onRechazar={handleRechazarCita}
+                                                    onCompletar={handleCompletarCita}
+                                                    loading={loading}
+                                                    userComision={user.comision}
+                                                />
+                                            ))}
+                                        </div>
+
+                                        {/* Paginación */}
+                                        <Pagination
+                                            currentPage={currentPageHoy}
+                                            totalPages={getTotalPages(getCitasHoyFiltradas().length)}
+                                            onPageChange={setCurrentPageHoy}
+                                            itemsPerPage={itemsPerPage}
+                                            totalItems={getCitasHoyFiltradas().length}
+                                        />
+                                    </>
                                 )}
                             </div>
                         </div>
