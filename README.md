@@ -239,11 +239,20 @@ Las contribuciones son bienvenidas. Por favor:
 
 Este proyecto está bajo la Licencia MIT. Ver archivo `LICENSE` para más detalles.
 
+## 📚 Documentación Adicional
+
+- **INICIO_RAPIDO_GITHUB.md** - Guía rápida para subir el proyecto a GitHub
+- **GUIA_GITHUB.md** - Instrucciones detalladas de GitHub
+- **CHECKLIST.md** - Lista de verificación para deployment
+- **DEPLOYMENT.md** - Guía completa de despliegue en producción
+- **subir_a_github.ps1** - Script automatizado para subir a GitHub
+
 ## 📞 Soporte
 
 Si tienes alguna pregunta o problema:
 
-- Abre un [Issue](https://github.com/TU_USUARIO/BarberEz-Proyect/issues)
+- Abre un [Issue](https://github.com/isKarTuX/BarberEz-Proyect/issues)
+- Lee la documentación en los archivos .md
 - Contacta al equipo de desarrollo
 
 ## 🎉 Agradecimientos
