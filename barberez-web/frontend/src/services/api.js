@@ -177,6 +177,9 @@ export const serviciosAPI = {
 
     actualizar: (idSer, servicioData) =>
         api.put(`/servicios/${idSer}`, servicioData),
+
+    eliminar: (idSer) =>
+        api.delete(`/servicios/${idSer}`),
 };
 
 // ==================== ADMIN ====================

@@ -40,6 +40,19 @@ class ServicioService {
             throw error;
         }
     }
+
+    // Eliminar servicio (soft delete - marca como inactivo)
+    static async eliminarServicio(idSer) {
+        try {
+            const [result] = await pool.execute(
+                'UPDATE servicio SET activo = FALSE WHERE idSer = ?',
+                [idSer]
+            );
+            return result.affectedRows > 0;
+        } catch (error) {
+            throw error;
+        }
+    }
 }
 
 export default ServicioService;

@@ -1,0 +1,1416 @@
+# 📋 DOCUMENTACIÓN DEL PROYECTO BARBEREZ
+## Sistema de Gestión de Barbería - Arquitectura y Base de Datos
+
+---
+
+## 📑 ÍNDICE
+
+1. [Arquitectura General del Sistema](#arquitectura-general)
+2. [Estructura de la Base de Datos](#estructura-base-datos)
+3. [Conexión a la Base de Datos](#conexion-bd)
+4. [Capa de Servicios (Lógica de Negocio)](#capa-servicios)
+5. [Capa de Rutas (Controladores)](#capa-rutas)
+6. [Frontend - Consumo de APIs](#frontend-apis)
+7. [Flujo Completo de una Petición](#flujo-peticion)
+8. [Seguridad y Autenticación](#seguridad)
+9. [Procedimientos Almacenados](#procedimientos)
+
+---
+
+## 1. ARQUITECTURA GENERAL DEL SISTEMA <a name="arquitectura-general"></a>
+
+### 🏗️ Estructura del Proyecto
+
+```
+barberez-web/
+├── backend/                    # Servidor Node.js + Express
+│   ├── config/
+│   │   └── database.js        # ⚡ Configuración de conexión MySQL
+│   ├── services/              # 🧠 Lógica de negocio (llamadas a BD)
+│   │   ├── authService.js     # Autenticación
+│   │   ├── citaService.js     # Gestión de citas
+│   │   ├── barberoService.js  # Gestión de barberos
+│   │   ├── adminService.js    # Panel administrativo
+│   │   ├── pagoService.js     # Sistema de pagos
+│   │   └── servicioService.js # Catálogo de servicios
+│   ├── routes/                # 🚦 Controladores (endpoints API)
+│   │   ├── authRoutes.js
+│   │   ├── citaRoutes.js
+│   │   ├── barberoRoutes.js
+│   │   ├── adminRoutes.js
+│   │   ├── pagoRoutes.js
+│   │   └── servicioRoutes.js
+│   ├── middleware/
+│   │   └── auth.js            # 🔐 Validación de JWT
+│   └── server.js              # 🚀 Punto de entrada del servidor
+│
+├── frontend/                   # Cliente React + Vite
+│   ├── src/
+│   │   ├── services/
+│   │   │   └── api.js         # 📡 Axios - Llamadas HTTP al backend
+│   │   ├── pages/             # Vistas de la aplicación
+│   │   ├── components/        # Componentes reutilizables
+│   │   └── context/
+│   │       └── AuthContext.jsx # Estado global de autenticación
+│
+└── db/
+    ├── schema.sql             # 📊 Estructura de tablas
+    └── datos_prueba.sql       # Datos de ejemplo
+```
+
+### 🔄 Patrón de Arquitectura: **MVC con Servicios**
+
+```
+Cliente (React) 
+    ↓ HTTP Request
+Rutas (Controladores) 
+    ↓ Llama a
+Servicios (Lógica + Consultas SQL) 
+    ↓ Ejecuta
+Base de Datos MySQL
+    ↓ Retorna datos
+Servicios → Rutas → Cliente
+```
+
+---
+
+## 2. ESTRUCTURA DE LA BASE DE DATOS <a name="estructura-base-datos"></a>
+
+### 📊 Diagrama Entidad-Relación
+
+```
+┌─────────────┐
+│   USUARIO   │ (Tabla principal)
+│─────────────│
+│ idUsuario PK│
+│ nombre      │
+│ correo      │
+│ contrasena  │
+│ telefono    │
+│ cedula      │
+│ rol (ENUM)  │ ← 'admin', 'barbero', 'cliente'
+└──────┬──────┘
+       │
+       ├──→ ┌──────────┐
+       │    │  ADMIN   │
+       │    │──────────│
+       │    │ idAdmin FK│
+       │    └──────────┘
+       │
+       ├──→ ┌──────────────┐
+       │    │   BARBERO    │
+       │    │──────────────│
+       │    │ idBarbero FK │
+       │    │ comision     │
+       │    └──────┬───────┘
+       │           │
+       │           │ 1:N
+       │           ↓
+       │    ┌──────────────┐
+       │    │    CITA      │
+       │    │──────────────│
+       │    │ idCita PK    │
+       │    │ fecha        │
+       │    │ horaIn       │
+       │    │ estado       │
+       │    │ idBarbero FK │
+       │    │ idCliente FK │
+       │    └──────┬───────┘
+       │           │
+       ├──→ ┌──────────────┐
+       │    │   CLIENTE    │
+       │    │──────────────│
+       │    │ idCliente FK │
+       │    └──────┬───────┘
+       │           │ 1:N
+       │           └─────────────┘
+       │
+       │    ┌──────────────────┐
+       │    │  SERVICIOCITA    │ (Tabla intermedia M:N)
+       │    │──────────────────│
+       │    │ idCIS PK         │
+       │    │ idCita FK        │
+       │    │ idSer FK         │
+       │    │ total            │
+       │    └────────┬─────────┘
+       │             │
+       │    ┌────────▼─────────┐
+       │    │    SERVICIO      │
+       │    │──────────────────│
+       │    │ idSer PK         │
+       │    │ nombre           │
+       │    │ duracion         │
+       │    │ precio           │
+       │    └──────────────────┘
+       │
+       └──→ ┌──────────────┐
+            │    PAGO      │
+            │──────────────│
+            │ idPago PK    │
+            │ idCita FK    │
+            │ monto        │
+            │ metodoPago   │
+            │ estado       │
+            └──────────────┘
+```
+
+### 📋 Tablas Principales
+
+#### 1. **usuario** (Tabla central)
+```sql
+CREATE TABLE usuario (
+    idUsuario INT PRIMARY KEY AUTO_INCREMENT,
+    nombre VARCHAR(100) NOT NULL,
+    correo VARCHAR(100) UNIQUE NOT NULL,
+    telefono VARCHAR(15),
+    contrasena VARCHAR(255) NOT NULL,
+    cedula VARCHAR(20) UNIQUE NOT NULL,
+    rol ENUM('admin', 'cliente', 'barbero') NOT NULL,
+    fechaRegistro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+**Relaciones:**
+- Herencia: Un usuario puede ser admin, cliente o barbero
+- 1:1 con admin, barbero o cliente según su rol
+
+#### 2. **cita** (Tabla de reservas)
+```sql
+CREATE TABLE cita (
+    idCita INT PRIMARY KEY AUTO_INCREMENT,
+    fecha DATE NOT NULL,
+    horaIn TIME NOT NULL,
+    estado ENUM('pendiente', 'confirmada', 'completada', 'cancelada'),
+    idCliente INT NOT NULL,
+    idBarbero INT NOT NULL,
+    fechaCreacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (idCliente) REFERENCES cliente(idCliente),
+    FOREIGN KEY (idBarbero) REFERENCES barbero(idBarbero),
+    UNIQUE KEY unique_barbero_horario (idBarbero, fecha, horaIn)
+);
+```
+
+**Restricciones:**
+- Un barbero NO puede tener dos citas al mismo tiempo
+- Las fechas no pueden ser en el pasado (trigger)
+
+#### 3. **servicioCita** (Relación M:N)
+```sql
+CREATE TABLE servicioCita (
+    idCIS INT PRIMARY KEY AUTO_INCREMENT,
+    idCita INT NOT NULL,
+    idSer INT NOT NULL,
+    total DECIMAL(10,2) NOT NULL,
+    FOREIGN KEY (idCita) REFERENCES cita(idCita) ON DELETE CASCADE,
+    FOREIGN KEY (idSer) REFERENCES servicio(idSer),
+    UNIQUE KEY unique_servicio_cita (idCita, idSer)
+);
+```
+
+**Función:** Conecta múltiples servicios con una cita
+
+---
+
+## 3. CONEXIÓN A LA BASE DE DATOS <a name="conexion-bd"></a>
+
+### 📂 Archivo: `backend/config/database.js`
+
+```javascript
+import mysql from 'mysql2/promise';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+// ⚡ POOL DE CONEXIONES
+// Ventaja: Reutiliza conexiones en lugar de crear nuevas cada vez
+const pool = mysql.createPool({
+    host: process.env.DB_HOST || 'localhost',
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASSWORD || '',
+    database: process.env.DB_NAME || 'barberia_barberez',
+    port: process.env.DB_PORT || 3306,
+    waitForConnections: true,      // Espera si no hay conexiones disponibles
+    connectionLimit: 10,            // Máximo 10 conexiones simultáneas
+    queueLimit: 0,                  // Sin límite de cola
+    enableKeepAlive: true,          // Mantiene conexiones activas
+    keepAliveInitialDelay: 0
+});
+
+// ✅ VERIFICAR CONEXIÓN AL INICIAR
+pool.getConnection()
+    .then(connection => {
+        console.log('✅ Conexión a MySQL establecida correctamente');
+        connection.release();  // Devuelve la conexión al pool
+    })
+    .catch(err => {
+        console.error('❌ Error conectando a MySQL:', err.message);
+        process.exit(1);  // Detiene el servidor si falla la conexión
+    });
+
+export default pool;
+```
+
+### 🔑 Variables de Entorno (`.env`)
+
+```env
+# Configuración de Base de Datos
+DB_HOST=localhost
+DB_USER=root
+DB_PASSWORD=tu_password
+DB_NAME=barberia_barberez
+DB_PORT=3306
+
+# Configuración JWT
+JWT_SECRET=secret_key_barberez_2024
+JWT_REFRESH_SECRET=refresh_secret_barberez_2024
+
+# Entorno
+NODE_ENV=development
+PORT=5000
+```
+
+### 💡 ¿Por qué usar un Pool de Conexiones?
+
+```
+❌ SIN POOL (Ineficiente):
+Cliente → Nueva Conexión → Query → Cierra Conexión
+Cliente → Nueva Conexión → Query → Cierra Conexión
+Cliente → Nueva Conexión → Query → Cierra Conexión
+(Crear/cerrar conexiones es costoso)
+
+✅ CON POOL (Eficiente):
+Cliente → Toma Conexión del Pool → Query → Devuelve al Pool
+Cliente → Reutiliza Conexión → Query → Devuelve al Pool
+Cliente → Reutiliza Conexión → Query → Devuelve al Pool
+(Las conexiones se reutilizan)
+```
+
+---
+
+## 4. CAPA DE SERVICIOS (LÓGICA DE NEGOCIO) <a name="capa-servicios"></a>
+
+### 🧠 ¿Qué son los Servicios?
+
+Los **servicios** son clases que contienen:
+- ✅ Lógica de negocio
+- ✅ Consultas SQL a la base de datos
+- ✅ Validaciones
+- ✅ Manejo de errores
+
+**Ventaja:** Separa la lógica de negocio de las rutas (controladores).
+
+---
+
+### 📄 Ejemplo 1: `authService.js` - Autenticación
+
+```javascript
+import pool from '../config/database.js';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+
+const JWT_SECRET = process.env.JWT_SECRET || 'secret_key_barberez_2024';
+const JWT_EXPIRES_IN = '8h';
+
+class AuthService {
+    // 🔐 LOGIN - Autenticar usuario
+    static async login(correo, contrasena) {
+        try {
+            // 1️⃣ BUSCAR USUARIO POR CORREO
+            const [users] = await pool.execute(
+                'SELECT * FROM usuario WHERE correo = ?',
+                [correo]
+            );
+
+            if (users.length === 0) {
+                throw new Error('Usuario no encontrado');
+            }
+
+            const user = users[0];
+
+            // 2️⃣ VERIFICAR CONTRASEÑA
+            // Detecta si es bcrypt hash o texto plano
+            const isBcryptHash = /^\$2[aby]\$/.test(user.contrasena);
+            let isPasswordValid = false;
+            
+            if (isBcryptHash) {
+                // Contraseña hasheada con bcrypt
+                isPasswordValid = await bcrypt.compare(contrasena, user.contrasena);
+            } else {
+                // Contraseña en texto plano (compatibilidad)
+                isPasswordValid = user.contrasena === contrasena;
+                
+                // Migrar a bcrypt automáticamente
+                if (isPasswordValid) {
+                    const hashedPassword = await bcrypt.hash(contrasena, 10);
+                    await pool.execute(
+                        'UPDATE usuario SET contrasena = ? WHERE idUsuario = ?',
+                        [hashedPassword, user.idUsuario]
+                    );
+                    console.warn(`✅ Contraseña migrada a bcrypt para: ${user.correo}`);
+                }
+            }
+
+            if (!isPasswordValid) {
+                throw new Error('Contraseña incorrecta');
+            }
+
+            // 3️⃣ GENERAR TOKEN JWT
+            delete user.contrasena;  // NO enviar contraseña al cliente
+            
+            const token = jwt.sign(
+                { 
+                    idUsuario: user.idUsuario,
+                    correo: user.correo,
+                    rol: user.rol,
+                    nombre: user.nombre
+                },
+                JWT_SECRET,
+                { expiresIn: JWT_EXPIRES_IN }
+            );
+
+            // 4️⃣ RETORNAR USUARIO + TOKEN
+            return { 
+                ...user, 
+                token,
+                expiresIn: JWT_EXPIRES_IN
+            };
+        } catch (error) {
+            throw error;
+        }
+    }
+
+    // 📝 REGISTRAR NUEVO USUARIO
+    static async register(userData) {
+        const { nombre, correo, telefono, contrasena, cedula, rol, comision = 0 } = userData;
+
+        try {
+            // 1️⃣ VERIFICAR SI EL CORREO YA EXISTE
+            const [existing] = await pool.execute(
+                'SELECT idUsuario FROM usuario WHERE correo = ? OR cedula = ?',
+                [correo, cedula]
+            );
+
+            if (existing.length > 0) {
+                throw new Error('El correo o cédula ya están registrados');
+            }
+
+            // 2️⃣ HASHEAR CONTRASEÑA
+            const hashedPassword = await bcrypt.hash(contrasena, 10);
+
+            // 3️⃣ INSERTAR USUARIO
+            const [result] = await pool.execute(
+                'INSERT INTO usuario (nombre, correo, telefono, contrasena, cedula, rol, comision) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                [nombre, correo, telefono, hashedPassword, cedula, rol, comision]
+            );
+
+            return { id: result.insertId, nombre, correo, rol };
+        } catch (error) {
+            throw error;
+        }
+    }
+}
+
+export default AuthService;
+```
+
+**📊 Flujo de Login:**
+
+```
+Cliente envía: { correo: "admin@barberez.com", contrasena: "admin123" }
+       ↓
+authRoutes.js recibe la petición POST /api/auth/login
+       ↓
+Llama a: AuthService.login(correo, contrasena)
+       ↓
+1. Ejecuta: SELECT * FROM usuario WHERE correo = ?
+2. Verifica contraseña con bcrypt.compare()
+3. Genera JWT con jwt.sign()
+       ↓
+Retorna: { idUsuario, nombre, correo, rol, token }
+       ↓
+authRoutes.js envía respuesta al cliente
+       ↓
+Cliente guarda el token en localStorage
+```
+
+---
+
+### 📄 Ejemplo 2: `citaService.js` - Gestión de Citas
+
+```javascript
+import pool from '../config/database.js';
+
+class CitaService {
+    // 📅 OBTENER CITAS DE UN CLIENTE
+    static async getCitasCliente(idCliente, estado = null) {
+        try {
+            let query = `
+                SELECT 
+                    c.idCita,
+                    c.fecha,
+                    c.horaIn,
+                    c.estado,
+                    u.nombre as nombreBarbero,
+                    u.telefono as telefonoBarbero,
+                    GROUP_CONCAT(s.nombre SEPARATOR ', ') as servicios,
+                    SUM(sc.total) as totalCita
+                FROM cita c
+                INNER JOIN barbero b ON c.idBarbero = b.idBarbero
+                INNER JOIN usuario u ON b.idBarbero = u.idUsuario
+                LEFT JOIN servicioCita sc ON c.idCita = sc.idCita
+                LEFT JOIN servicio s ON sc.idSer = s.idSer
+                WHERE c.idCliente = ?
+            `;
+
+            const params = [idCliente];
+
+            // FILTRO OPCIONAL POR ESTADO
+            if (estado) {
+                query += ' AND c.estado = ?';
+                params.push(estado);
+            }
+
+            query += ' GROUP BY c.idCita ORDER BY c.fecha DESC, c.horaIn DESC';
+
+            const [citas] = await pool.execute(query, params);
+            return citas;
+        } catch (error) {
+            throw error;
+        }
+    }
+
+    // ➕ CREAR NUEVA CITA
+    static async crearCita(citaData) {
+        const { fecha, horaIn, idCliente, idBarbero, servicios, metodoPago } = citaData;
+
+        // USAR TRANSACCIÓN (todas las operaciones o ninguna)
+        const connection = await pool.getConnection();
+        
+        try {
+            await connection.beginTransaction();
+
+            // 1️⃣ VERIFICAR DISPONIBILIDAD DEL BARBERO
+            const [conflicto] = await connection.execute(
+                `SELECT idCita FROM cita 
+                 WHERE idBarbero = ? AND fecha = ? AND horaIn = ? 
+                 AND estado IN ('pendiente', 'confirmada')`,
+                [idBarbero, fecha, horaIn]
+            );
+
+            if (conflicto.length > 0) {
+                throw new Error('El barbero ya tiene una cita a esa hora');
+            }
+
+            // 2️⃣ CREAR LA CITA
+            const [resultCita] = await connection.execute(
+                'INSERT INTO cita (fecha, horaIn, idCliente, idBarbero) VALUES (?, ?, ?, ?)',
+                [fecha, horaIn, idCliente, idBarbero]
+            );
+
+            const idCita = resultCita.insertId;
+
+            // 3️⃣ AGREGAR SERVICIOS
+            let montoTotal = 0;
+            for (const idSer of servicios) {
+                // Obtener precio del servicio
+                const [servicio] = await connection.execute(
+                    'SELECT precio FROM servicio WHERE idSer = ? AND activo = TRUE',
+                    [idSer]
+                );
+
+                if (servicio.length === 0) {
+                    throw new Error(`Servicio ${idSer} no encontrado o inactivo`);
+                }
+
+                const precio = servicio[0].precio;
+                montoTotal += parseFloat(precio);
+
+                // Insertar en servicioCita
+                await connection.execute(
+                    'INSERT INTO servicioCita (idCita, idSer, total) VALUES (?, ?, ?)',
+                    [idCita, idSer, precio]
+                );
+            }
+
+            // 4️⃣ CREAR PAGO
+            await connection.execute(
+                'INSERT INTO pago (idCita, monto, metodoPago, estado) VALUES (?, ?, ?, ?)',
+                [idCita, montoTotal, metodoPago, 'pendiente']
+            );
+
+            // ✅ CONFIRMAR TRANSACCIÓN
+            await connection.commit();
+
+            return { idCita, monto: montoTotal };
+
+        } catch (error) {
+            // ❌ REVERTIR TRANSACCIÓN SI HAY ERROR
+            await connection.rollback();
+            throw error;
+        } finally {
+            connection.release();
+        }
+    }
+
+    // ✅ COMPLETAR CITA
+    static async completarCita(idCita, idBarbero) {
+        try {
+            // VERIFICAR QUE LA CITA PERTENECE AL BARBERO
+            const [cita] = await pool.execute(
+                'SELECT estado FROM cita WHERE idCita = ? AND idBarbero = ?',
+                [idCita, idBarbero]
+            );
+
+            if (cita.length === 0) {
+                throw new Error('Cita no encontrada');
+            }
+
+            if (cita[0].estado === 'completada') {
+                throw new Error('La cita ya está completada');
+            }
+
+            // ACTUALIZAR ESTADO
+            await pool.execute(
+                'UPDATE cita SET estado = ? WHERE idCita = ?',
+                ['completada', idCita]
+            );
+
+            // ACTUALIZAR PAGO
+            await pool.execute(
+                'UPDATE pago SET estado = ? WHERE idCita = ?',
+                ['pagado', idCita]
+            );
+
+            return { success: true, message: 'Cita completada exitosamente' };
+        } catch (error) {
+            throw error;
+        }
+    }
+}
+
+export default CitaService;
+```
+
+**📊 Flujo de Crear Cita:**
+
+```
+Cliente selecciona:
+  - Barbero: Carlos
+  - Fecha: 2025-11-26
+  - Hora: 10:00
+  - Servicios: [Corte, Barba]
+       ↓
+POST /api/citas
+       ↓
+citaRoutes.js → CitaService.crearCita()
+       ↓
+TRANSACCIÓN SQL:
+  1. SELECT: ¿Barbero disponible a esa hora?
+  2. INSERT INTO cita (...)
+  3. SELECT precio FROM servicio WHERE idSer IN (1,2)
+  4. INSERT INTO servicioCita (idCita=X, idSer=1, total=15000)
+  5. INSERT INTO servicioCita (idCita=X, idSer=2, total=10000)
+  6. INSERT INTO pago (idCita=X, monto=25000)
+  7. COMMIT (todo OK) o ROLLBACK (si hay error)
+       ↓
+Retorna: { idCita: 123, monto: 25000 }
+```
+
+---
+
+### 📄 Ejemplo 3: `adminService.js` - Panel Administrativo
+
+```javascript
+import pool from '../config/database.js';
+
+class AdminService {
+    // 📊 ESTADÍSTICAS DE CLIENTES
+    static async getClientesStats(filtros = {}) {
+        try {
+            let query = `
+                SELECT 
+                    u.idUsuario as idCliente,
+                    u.nombre,
+                    u.correo,
+                    u.telefono,
+                    u.cedula,
+                    COUNT(c.idCita) as totalCitas,
+                    COUNT(CASE WHEN c.estado = 'completada' THEN 1 END) as citasCompletadas,
+                    COUNT(CASE WHEN c.estado = 'cancelada' THEN 1 END) as citasCanceladas,
+                    COUNT(CASE WHEN c.estado = 'pendiente' THEN 1 END) as citasPendientes,
+                    SUM(CASE WHEN c.estado = 'completada' AND p.estado = 'pagado' 
+                        THEN p.monto ELSE 0 END) as totalGastado,
+                    MAX(c.fecha) as ultimaCita
+                FROM usuario u
+                INNER JOIN cliente cl ON u.idUsuario = cl.idCliente
+                LEFT JOIN cita c ON cl.idCliente = c.idCliente
+                LEFT JOIN pago p ON c.idCita = p.idCita
+                WHERE 1=1
+            `;
+
+            const params = [];
+
+            // FILTROS DINÁMICOS
+            if (filtros.nombre) {
+                query += ' AND u.nombre LIKE ?';
+                params.push(`%${filtros.nombre}%`);
+            }
+
+            if (filtros.cedula) {
+                query += ' AND u.cedula = ?';
+                params.push(filtros.cedula);
+            }
+
+            query += ' GROUP BY u.idUsuario ORDER BY totalGastado DESC';
+
+            const [clientes] = await pool.execute(query, params);
+            return clientes;
+
+        } catch (error) {
+            throw error;
+        }
+    }
+
+    // 💰 INGRESOS TOTALES DEL NEGOCIO
+    static async getIngresosTotales(fechaInicio, fechaFin) {
+        try {
+            const [result] = await pool.execute(
+                `SELECT 
+                    COUNT(DISTINCT c.idCita) as totalCitas,
+                    SUM(p.monto) as ingresoTotal,
+                    AVG(p.monto) as promedioIngreso,
+                    COUNT(DISTINCT c.idBarbero) as barberosActivos
+                FROM cita c
+                INNER JOIN pago p ON c.idCita = p.idCita
+                WHERE c.fecha BETWEEN ? AND ?
+                AND c.estado = 'completada'
+                AND p.estado = 'pagado'`,
+                [fechaInicio, fechaFin]
+            );
+
+            return result[0];
+        } catch (error) {
+            throw error;
+        }
+    }
+}
+
+export default AdminService;
+```
+
+---
+
+## 5. CAPA DE RUTAS (CONTROLADORES) <a name="capa-rutas"></a>
+
+### 🚦 ¿Qué son las Rutas?
+
+Las **rutas** (controladores) son el punto de entrada de las peticiones HTTP. Su función:
+- ✅ Recibir la petición del cliente
+- ✅ Validar datos de entrada
+- ✅ Llamar al servicio correspondiente
+- ✅ Enviar respuesta al cliente
+
+---
+
+### 📄 Ejemplo: `authRoutes.js`
+
+```javascript
+import express from 'express';
+import AuthService from '../services/authService.js';
+import { body, validationResult } from 'express-validator';
+import rateLimit from 'express-rate-limit';
+
+const router = express.Router();
+
+// 🛡️ RATE LIMITER - Prevenir ataques de fuerza bruta
+const loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,  // 15 minutos
+    max: 5,                     // 5 intentos máximo
+    message: {
+        success: false,
+        message: 'Demasiados intentos. Intenta en 15 minutos.'
+    }
+});
+
+// 🔐 POST /api/auth/login - Iniciar sesión
+router.post('/login',
+    loginLimiter,  // Aplicar rate limiting
+    [
+        // VALIDACIONES
+        body('correo').trim().notEmpty().withMessage('Correo requerido'),
+        body('contrasena').trim().notEmpty().withMessage('Contraseña requerida')
+    ],
+    async (req, res) => {
+        try {
+            console.log('📨 Login attempt:', { correo: req.body.correo });
+            
+            // VERIFICAR ERRORES DE VALIDACIÓN
+            const errors = validationResult(req);
+            if (!errors.isEmpty()) {
+                console.log('❌ Validation errors:', errors.array());
+                return res.status(400).json({
+                    success: false,
+                    message: 'Datos inválidos',
+                    errors: errors.array()
+                });
+            }
+
+            const { correo, contrasena } = req.body;
+
+            // LLAMAR AL SERVICIO
+            const user = await AuthService.login(correo, contrasena);
+
+            console.log('✅ Login successful:', user.correo);
+            res.json({
+                success: true,
+                message: 'Login exitoso',
+                data: user
+            });
+        } catch (error) {
+            console.error('❌ Login error:', error.message);
+            res.status(401).json({
+                success: false,
+                message: error.message
+            });
+        }
+    }
+);
+
+// 📝 POST /api/auth/register - Registrar nuevo usuario
+router.post('/register',
+    [
+        body('nombre').trim().isLength({ min: 3 }),
+        body('correo').isEmail().normalizeEmail(),
+        body('telefono').matches(/^\d{10}$/),
+        body('contrasena').isLength({ min: 6 }),
+        body('cedula').matches(/^\d{7,10}$/),
+        body('rol').isIn(['admin', 'cliente', 'barbero'])
+    ],
+    async (req, res) => {
+        try {
+            const errors = validationResult(req);
+            if (!errors.isEmpty()) {
+                return res.status(400).json({
+                    success: false,
+                    errors: errors.array()
+                });
+            }
+
+            const result = await AuthService.register(req.body);
+
+            res.status(201).json({
+                success: true,
+                message: 'Usuario registrado exitosamente',
+                data: result
+            });
+        } catch (error) {
+            res.status(400).json({
+                success: false,
+                message: error.message
+            });
+        }
+    }
+);
+
+export default router;
+```
+
+### 📊 Flujo de una Petición HTTP
+
+```
+┌─────────────┐
+│   CLIENTE   │ (React)
+│ (Frontend)  │
+└──────┬──────┘
+       │ POST /api/auth/login
+       │ { correo: "...", contrasena: "..." }
+       ↓
+┌──────────────────┐
+│   MIDDLEWARE     │
+│  - CORS          │ ← Permite peticiones del frontend
+│  - Body Parser   │ ← Parsea JSON del body
+│  - Rate Limiter  │ ← Previene ataques
+└──────┬───────────┘
+       ↓
+┌──────────────────┐
+│ authRoutes.js    │
+│ (Controlador)    │
+│  - Valida datos  │ ← express-validator
+│  - Llama servicio│
+└──────┬───────────┘
+       ↓
+┌──────────────────┐
+│ authService.js   │
+│ (Lógica Negocio) │
+│  - Query SQL     │
+│  - Bcrypt        │
+│  - JWT           │
+└──────┬───────────┘
+       ↓
+┌──────────────────┐
+│  database.js     │
+│  (Pool MySQL)    │
+└──────┬───────────┘
+       ↓
+┌──────────────────┐
+│   MySQL DB       │
+│  barberia_       │
+│   barberez       │
+└──────┬───────────┘
+       ↓ Retorna datos
+┌──────────────────┐
+│   RESPUESTA      │
+│   JSON           │
+│ { success: true, │
+│   data: {...},   │
+│   token: "..."   │
+│ }                │
+└──────────────────┘
+```
+
+---
+
+## 6. FRONTEND - CONSUMO DE APIs <a name="frontend-apis"></a>
+
+### 📡 Archivo: `frontend/src/services/api.js`
+
+```javascript
+import axios from 'axios';
+
+// CONFIGURACIÓN BASE DE AXIOS
+const api = axios.create({
+    baseURL: 'http://localhost:5000/api',
+    timeout: 30000,  // 30 segundos
+    headers: {
+        'Content-Type': 'application/json'
+    }
+});
+
+// 🔐 INTERCEPTOR DE REQUESTS - Agregar token JWT
+api.interceptors.request.use(
+    (config) => {
+        const token = localStorage.getItem('token');
+        if (token) {
+            config.headers.Authorization = `Bearer ${token}`;
+        }
+        return config;
+    },
+    (error) => {
+        return Promise.reject(error);
+    }
+);
+
+// 🔄 INTERCEPTOR DE RESPONSES - Manejar errores
+api.interceptors.response.use(
+    (response) => response,
+    async (error) => {
+        if (error.response?.status === 401) {
+            // Token expirado - Redirigir al login
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            window.location.href = '/login';
+        }
+        return Promise.reject(error);
+    }
+);
+
+// ===============================
+// 🔐 AUTENTICACIÓN
+// ===============================
+
+export const login = async (correo, contrasena) => {
+    const response = await api.post('/auth/login', { correo, contrasena });
+    return response.data;
+};
+
+export const register = async (userData) => {
+    const response = await api.post('/auth/register', userData);
+    return response.data;
+};
+
+// ===============================
+// 📅 CITAS
+// ===============================
+
+export const getCitasCliente = async () => {
+    const response = await api.get('/citas/cliente');
+    return response.data;
+};
+
+export const crearCita = async (citaData) => {
+    const response = await api.post('/citas', citaData);
+    return response.data;
+};
+
+export const cancelarCita = async (idCita) => {
+    const response = await api.put(`/citas/${idCita}/cancelar`);
+    return response.data;
+};
+
+// ===============================
+// 👨‍💼 BARBEROS
+// ===============================
+
+export const getBarberosDisponibles = async (fecha) => {
+    const response = await api.get(`/barberos/disponibles?fecha=${fecha}`);
+    return response.data;
+};
+
+// ===============================
+// 💈 SERVICIOS
+// ===============================
+
+export const getServiciosActivos = async () => {
+    const response = await api.get('/servicios');
+    return response.data;
+};
+
+export default api;
+```
+
+### 📄 Ejemplo de Uso en Componente React
+
+```javascript
+// frontend/src/pages/Login.jsx
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { login } from '../services/api';
+
+function Login() {
+    const [correo, setCorreo] = useState('');
+    const [contrasena, setContrasena] = useState('');
+    const [error, setError] = useState('');
+    const navigate = useNavigate();
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        try {
+            // LLAMAR A LA API
+            const response = await login(correo, contrasena);
+            
+            // GUARDAR TOKEN Y USUARIO
+            localStorage.setItem('token', response.data.token);
+            localStorage.setItem('user', JSON.stringify(response.data));
+            
+            // REDIRIGIR SEGÚN ROL
+            if (response.data.rol === 'admin') {
+                navigate('/admin/dashboard');
+            } else if (response.data.rol === 'barbero') {
+                navigate('/barbero/dashboard');
+            } else {
+                navigate('/cliente/dashboard');
+            }
+        } catch (err) {
+            setError(err.response?.data?.message || 'Error al iniciar sesión');
+        }
+    };
+
+    return (
+        <form onSubmit={handleSubmit}>
+            <input 
+                type="email" 
+                value={correo}
+                onChange={(e) => setCorreo(e.target.value)}
+                placeholder="Correo"
+            />
+            <input 
+                type="password" 
+                value={contrasena}
+                onChange={(e) => setContrasena(e.target.value)}
+                placeholder="Contraseña"
+            />
+            {error && <p className="error">{error}</p>}
+            <button type="submit">Iniciar Sesión</button>
+        </form>
+    );
+}
+```
+
+---
+
+## 7. FLUJO COMPLETO DE UNA PETICIÓN <a name="flujo-peticion"></a>
+
+### 🔄 Ejemplo: Cliente Agenda una Cita
+
+```
+1️⃣ FRONTEND (React)
+   └─ ClienteDashboard.jsx
+      └─ handleAgendar() {
+            const citaData = {
+              fecha: "2025-11-26",
+              horaIn: "10:00",
+              idBarbero: 7,
+              servicios: [1, 2],
+              metodoPago: "efectivo"
+            };
+            await crearCita(citaData);
+         }
+
+2️⃣ API CLIENT (Axios)
+   └─ api.js
+      └─ export const crearCita = async (citaData) => {
+            // Agrega token JWT al header
+            return api.post('/citas', citaData);
+         }
+
+3️⃣ HTTP REQUEST
+   └─ POST http://localhost:5000/api/citas
+      Headers: {
+        Authorization: "Bearer eyJhbGc...",
+        Content-Type: "application/json"
+      }
+      Body: { fecha, horaIn, idBarbero, servicios, metodoPago }
+
+4️⃣ BACKEND (Express)
+   └─ server.js
+      ├─ MIDDLEWARE: CORS → Body Parser → Logging
+      └─ RUTAS: app.use('/api/citas', citaRoutes)
+
+5️⃣ CONTROLADOR (Rutas)
+   └─ citaRoutes.js
+      └─ router.post('/', auth, validaciones, async (req, res) => {
+            const result = await CitaService.crearCita(req.body);
+            res.json({ success: true, data: result });
+         })
+
+6️⃣ SERVICIO (Lógica)
+   └─ citaService.js
+      └─ static async crearCita(citaData) {
+            const conn = await pool.getConnection();
+            await conn.beginTransaction();
+            
+            // 1. Verificar disponibilidad
+            SELECT * FROM cita WHERE ...
+            
+            // 2. Crear cita
+            INSERT INTO cita (fecha, horaIn, ...) VALUES (?, ?, ...)
+            
+            // 3. Agregar servicios
+            INSERT INTO servicioCita (idCita, idSer, total) VALUES ...
+            
+            // 4. Crear pago
+            INSERT INTO pago (idCita, monto, ...) VALUES ...
+            
+            await conn.commit();
+            return { idCita, monto };
+         }
+
+7️⃣ BASE DE DATOS (MySQL)
+   └─ barberia_barberez
+      ├─ cita (nueva fila insertada)
+      ├─ servicioCita (2 filas insertadas)
+      └─ pago (1 fila insertada)
+
+8️⃣ RESPUESTA
+   └─ MySQL → Service → Route → Express → HTTP Response
+      {
+        "success": true,
+        "data": {
+          "idCita": 28,
+          "monto": 25000
+        }
+      }
+
+9️⃣ FRONTEND (React)
+   └─ Recibe respuesta
+      └─ Muestra notificación: "Cita agendada exitosamente"
+      └─ Actualiza lista de citas
+```
+
+---
+
+## 8. SEGURIDAD Y AUTENTICACIÓN <a name="seguridad"></a>
+
+### 🔐 JWT (JSON Web Tokens)
+
+#### ¿Qué es JWT?
+```
+JWT = Header + Payload + Signature
+
+Ejemplo:
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9    ← Header (algoritmo)
+.
+eyJpZFVzdWFyaW8iOjEsImNvcnJlbyI6ImFkbWluQC4uLiJ9    ← Payload (datos)
+.
+SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c    ← Signature (firma)
+```
+
+#### Flujo de Autenticación
+
+```
+1️⃣ LOGIN
+   Cliente → POST /api/auth/login
+   Servidor:
+     - Verifica usuario/contraseña
+     - Genera JWT: jwt.sign({ idUsuario, rol }, SECRET, { expiresIn: '8h' })
+     - Retorna: { token: "eyJ...", user: {...} }
+   Cliente guarda token en localStorage
+
+2️⃣ PETICIONES PROTEGIDAS
+   Cliente → GET /api/citas/cliente
+   Headers: { Authorization: "Bearer eyJ..." }
+   
+   Middleware auth.js:
+     const token = req.headers.authorization?.split(' ')[1];
+     const decoded = jwt.verify(token, SECRET);
+     req.user = decoded;  // { idUsuario, rol }
+     next();
+   
+   Route → Service → DB → Response
+
+3️⃣ TOKEN EXPIRADO
+   Cliente → GET /api/citas
+   Servidor → 401 Unauthorized
+   Interceptor detecta 401 → Redirige a /login
+```
+
+### 🛡️ Middleware de Autenticación
+
+```javascript
+// backend/middleware/auth.js
+import jwt from 'jsonwebtoken';
+
+const JWT_SECRET = process.env.JWT_SECRET;
+
+export const auth = (req, res, next) => {
+    try {
+        // 1️⃣ EXTRAER TOKEN DEL HEADER
+        const token = req.headers.authorization?.split(' ')[1];
+        
+        if (!token) {
+            return res.status(401).json({
+                success: false,
+                message: 'Token no proporcionado'
+            });
+        }
+
+        // 2️⃣ VERIFICAR Y DECODIFICAR TOKEN
+        const decoded = jwt.verify(token, JWT_SECRET);
+        
+        // 3️⃣ AGREGAR USUARIO A LA REQUEST
+        req.user = decoded;  // { idUsuario, correo, rol }
+        
+        next();  // ✅ Token válido, continuar
+        
+    } catch (error) {
+        return res.status(401).json({
+            success: false,
+            message: 'Token inválido o expirado'
+        });
+    }
+};
+
+// MIDDLEWARE PARA VERIFICAR ROL
+export const requireRole = (...roles) => {
+    return (req, res, next) => {
+        if (!roles.includes(req.user.rol)) {
+            return res.status(403).json({
+                success: false,
+                message: 'No tienes permiso para realizar esta acción'
+            });
+        }
+        next();
+    };
+};
+```
+
+### 📝 Uso en Rutas
+
+```javascript
+import { auth, requireRole } from '../middleware/auth.js';
+
+// 🔓 RUTA PÚBLICA
+router.post('/login', async (req, res) => { ... });
+
+// 🔐 RUTA PROTEGIDA (requiere login)
+router.get('/citas/cliente', auth, async (req, res) => {
+    const idCliente = req.user.idUsuario;  // Del token JWT
+    const citas = await CitaService.getCitasCliente(idCliente);
+    res.json({ success: true, data: citas });
+});
+
+// 👮 RUTA SOLO PARA ADMIN
+router.get('/admin/stats', auth, requireRole('admin'), async (req, res) => {
+    const stats = await AdminService.getStats();
+    res.json({ success: true, data: stats });
+});
+
+// 🚫 RUTA PARA ADMIN Y BARBERO
+router.put('/citas/:id/completar', 
+    auth, 
+    requireRole('admin', 'barbero'), 
+    async (req, res) => { ... }
+);
+```
+
+---
+
+## 9. PROCEDIMIENTOS ALMACENADOS <a name="procedimientos"></a>
+
+### 📦 ¿Qué son los Procedimientos Almacenados?
+
+Son funciones SQL guardadas en la base de datos que:
+- ✅ Encapsulan lógica compleja
+- ✅ Se ejecutan más rápido
+- ✅ Reducen tráfico de red
+
+### 📄 Ejemplo: `sp_registrar_usuario`
+
+```sql
+DELIMITER $$
+
+CREATE PROCEDURE sp_registrar_usuario(
+    IN p_nombre VARCHAR(100),
+    IN p_correo VARCHAR(100),
+    IN p_telefono VARCHAR(15),
+    IN p_contrasena VARCHAR(255),
+    IN p_cedula VARCHAR(20),
+    IN p_rol ENUM('admin','cliente','barbero'),
+    IN p_comision DECIMAL(5,2)
+)
+BEGIN
+    DECLARE v_idUsuario INT;
+    
+    -- 1️⃣ INSERTAR EN TABLA USUARIO
+    INSERT INTO usuario (nombre, correo, telefono, contrasena, cedula, rol)
+    VALUES (p_nombre, p_correo, p_telefono, p_contrasena, p_cedula, p_rol);
+    
+    SET v_idUsuario = LAST_INSERT_ID();
+    
+    -- 2️⃣ INSERTAR EN TABLA SEGÚN ROL
+    IF p_rol = 'admin' THEN
+        INSERT INTO admin (idAdmin) VALUES (v_idUsuario);
+    ELSEIF p_rol = 'cliente' THEN
+        INSERT INTO cliente (idCliente) VALUES (v_idUsuario);
+    ELSEIF p_rol = 'barbero' THEN
+        INSERT INTO barbero (idBarbero, comision) 
+        VALUES (v_idUsuario, p_comision);
+    END IF;
+    
+    -- 3️⃣ RETORNAR RESULTADO
+    SELECT v_idUsuario AS idUsuario, p_rol AS rol;
+END$$
+
+DELIMITER ;
+```
+
+### 🔧 Uso desde Node.js
+
+```javascript
+// Llamar procedimiento almacenado
+const [result] = await pool.execute(
+    'CALL sp_registrar_usuario(?, ?, ?, ?, ?, ?, ?)',
+    [nombre, correo, telefono, hashedPassword, cedula, rol, comision]
+);
+
+console.log(result[0][0]);  // { idUsuario: 11, rol: 'cliente' }
+```
+
+---
+
+## 📊 RESUMEN EJECUTIVO
+
+### Arquitectura del Sistema
+
+```
+┌─────────────────────────────────────────────┐
+│             CLIENTE (React)                  │
+│  - Componentes UI                           │
+│  - Context API (estado global)              │
+│  - Axios (peticiones HTTP)                  │
+└──────────────────┬──────────────────────────┘
+                   │ HTTP/JSON
+                   ↓
+┌─────────────────────────────────────────────┐
+│          SERVIDOR (Node.js + Express)        │
+│  ┌───────────────────────────────────────┐  │
+│  │  MIDDLEWARES                          │  │
+│  │  - CORS, Body Parser, Logging         │  │
+│  └───────────────────────────────────────┘  │
+│  ┌───────────────────────────────────────┐  │
+│  │  RUTAS (Controladores)                │  │
+│  │  - authRoutes.js                      │  │
+│  │  - citaRoutes.js                      │  │
+│  │  - barberoRoutes.js                   │  │
+│  │  - adminRoutes.js                     │  │
+│  └───────────────────────────────────────┘  │
+│  ┌───────────────────────────────────────┐  │
+│  │  SERVICIOS (Lógica de Negocio)        │  │
+│  │  - authService.js                     │  │
+│  │  - citaService.js                     │  │
+│  │  - barberoService.js                  │  │
+│  │  - adminService.js                    │  │
+│  └───────────────────────────────────────┘  │
+│  ┌───────────────────────────────────────┐  │
+│  │  CONFIGURACIÓN                        │  │
+│  │  - database.js (Pool MySQL)           │  │
+│  │  - auth.js (Middleware JWT)           │  │
+│  └───────────────────────────────────────┘  │
+└──────────────────┬──────────────────────────┘
+                   │ SQL Queries
+                   ↓
+┌─────────────────────────────────────────────┐
+│       BASE DE DATOS (MySQL)                  │
+│  - usuario (herencia por rol)               │
+│  - cita (reservas)                          │
+│  - servicio (catálogo)                      │
+│  - pago (transacciones)                     │
+│  - servicioCita (relación M:N)              │
+│  - Procedimientos almacenados               │
+│  - Triggers y constraints                   │
+└─────────────────────────────────────────────┘
+```
+
+### Ventajas de Esta Arquitectura
+
+1. **Separación de Responsabilidades**
+   - Frontend: Solo UI y lógica de presentación
+   - Backend: Lógica de negocio y acceso a datos
+   - Base de Datos: Persistencia y constraints
+
+2. **Escalabilidad**
+   - Pool de conexiones reutiliza recursos
+   - Servicios independientes y modulares
+   - Fácil agregar nuevas funcionalidades
+
+3. **Seguridad**
+   - JWT para autenticación stateless
+   - Bcrypt para contraseñas hasheadas
+   - Rate limiting contra ataques
+   - Validación en múltiples capas
+
+4. **Mantenibilidad**
+   - Código organizado por responsabilidades
+   - Fácil de testear (unit tests)
+   - Documentación clara
+
+---
+
+## ✅ CONCLUSIÓN
+
+Este proyecto demuestra una arquitectura profesional de 3 capas:
+
+1. **Frontend (React)**: Interfaz de usuario intuitiva
+2. **Backend (Node.js/Express)**: API RESTful robusta
+3. **Base de Datos (MySQL)**: Modelo relacional normalizado
+
+**Tecnologías Clave:**
+- ✅ MySQL con transacciones ACID
+- ✅ Pool de conexiones para eficiencia
+- ✅ JWT para autenticación segura
+- ✅ Bcrypt para encriptación de contraseñas
+- ✅ Express-validator para validaciones
+- ✅ Axios con interceptors
+- ✅ React Context para estado global
+
+**Patrones de Diseño:**
+- ✅ MVC (Modelo-Vista-Controlador)
+- ✅ Repository Pattern (Servicios)
+- ✅ Middleware Pattern
+- ✅ Observer Pattern (React Context)
+
+---
+
+**Desarrollado por:** Keyner Rodriguez  
+**Fecha:** Noviembre 2025  
+**Tecnologías:** Node.js, Express, MySQL, React, JWT, Bcrypt

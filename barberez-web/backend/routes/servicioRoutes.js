@@ -77,5 +77,31 @@ router.put('/:idSer', async (req, res) => {
     }
 });
 
+// Eliminar servicio
+router.delete('/:idSer', async (req, res) => {
+    try {
+        const { idSer } = req.params;
+
+        const deleted = await ServicioService.eliminarServicio(parseInt(idSer));
+
+        if (!deleted) {
+            return res.status(404).json({
+                success: false,
+                message: 'Servicio no encontrado'
+            });
+        }
+
+        res.json({
+            success: true,
+            message: 'Servicio eliminado exitosamente'
+        });
+    } catch (error) {
+        res.status(400).json({
+            success: false,
+            message: error.message
+        });
+    }
+});
+
 export default router;
 

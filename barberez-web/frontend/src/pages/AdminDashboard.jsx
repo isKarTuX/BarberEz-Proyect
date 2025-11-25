@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { adminAPI, authAPI, barberosAPI } from '../services/api';
+import { adminAPI, authAPI, barberosAPI, serviciosAPI } from '../services/api';
 import { Scissors, LogOut, Users, TrendingUp, Calendar, UserPlus } from 'lucide-react';
 import {
     FaSearch, FaFilter, FaDownload, FaSync, FaDatabase, FaTimes,
@@ -43,11 +43,24 @@ export default function AdminDashboard() {
     const [currentPageCitas, setCurrentPageCitas] = useState(1);
     const [currentPageClientes, setCurrentPageClientes] = useState(1);
     const [currentPageBarberos, setCurrentPageBarberos] = useState(1);
+    const [currentPageServicios, setCurrentPageServicios] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(12);
     const [customItemsPerPage, setCustomItemsPerPage] = useState(() => {
         const saved = localStorage.getItem('adminItemsPerPage');
         return saved ? parseInt(saved) : null;
     });
+
+    // Estados para gestión de servicios
+    const [servicios, setServicios] = useState([]);
+    const [loadingServicios, setLoadingServicios] = useState(false);
+    const [modalServicio, setModalServicio] = useState(false);
+    const [servicioEditar, setServicioEditar] = useState(null);
+    const [formServicio, setFormServicio] = useState({
+        nombre: '',
+        duracion: '',
+        precio: ''
+    });
+    const [busquedaServicio, setBusquedaServicio] = useState('');
 
     // Estados de filtros
     const [filtros, setFiltros] = useState(() => {
@@ -273,6 +286,8 @@ export default function AdminDashboard() {
             } else {
                 cargarBarberosGestion();
             }
+        } else if (activeTab === 'servicios') {
+            cargarServicios();
         }
     }, [activeTab, vistaGestion, filtroGestion, ordenClientes, ordenBarberos]);
 
@@ -525,6 +540,127 @@ export default function AdminDashboard() {
 
     // ==================== FIN FUNCIONES DE GESTIÓN ====================
 
+    // ==================== FUNCIONES DE SERVICIOS ====================
+
+    const cargarServicios = async () => {
+        setLoadingServicios(true);
+        try {
+            const response = await serviciosAPI.getAll();
+            setServicios(response.data.data);
+        } catch (error) {
+            console.error('Error al cargar servicios:', error);
+            showToast('Error al cargar servicios', 'error');
+        } finally {
+            setLoadingServicios(false);
+        }
+    };
+
+    const filtrarServicios = () => {
+        if (!busquedaServicio) return servicios;
+
+        const busqueda = busquedaServicio.toLowerCase();
+        return servicios.filter(s =>
+            s.nombre?.toLowerCase().includes(busqueda)
+        );
+    };
+
+    const getServiciosPaginados = () => paginate(filtrarServicios(), currentPageServicios);
+
+    const abrirModalServicio = (servicio = null) => {
+        if (servicio) {
+            setServicioEditar(servicio);
+            setFormServicio({
+                nombre: servicio.nombre,
+                duracion: servicio.duracion,
+                precio: servicio.precio
+            });
+        } else {
+            setServicioEditar(null);
+            setFormServicio({
+                nombre: '',
+                duracion: '',
+                precio: ''
+            });
+        }
+        setModalServicio(true);
+    };
+
+    const cerrarModalServicio = () => {
+        setModalServicio(false);
+        setServicioEditar(null);
+        setFormServicio({
+            nombre: '',
+            duracion: '',
+            precio: ''
+        });
+    };
+
+    const handleGuardarServicio = async (e) => {
+        e.preventDefault();
+
+        if (!formServicio.nombre || !formServicio.duracion || !formServicio.precio) {
+            showToast('Todos los campos son requeridos', 'warning');
+            return;
+        }
+
+        if (parseInt(formServicio.duracion) < 1) {
+            showToast('La duración debe ser mayor a 0', 'warning');
+            return;
+        }
+
+        if (parseFloat(formServicio.precio) < 0) {
+            showToast('El precio debe ser mayor o igual a 0', 'warning');
+            return;
+        }
+
+        setLoading(true);
+        try {
+            if (servicioEditar) {
+                // Actualizar
+                await serviciosAPI.actualizar(servicioEditar.idSer, {
+                    ...formServicio,
+                    activo: true
+                });
+                showToast('Servicio actualizado exitosamente', 'success');
+            } else {
+                // Crear nuevo
+                await serviciosAPI.crear(formServicio);
+                showToast('Servicio creado exitosamente', 'success');
+            }
+
+            cerrarModalServicio();
+            cargarServicios();
+        } catch (error) {
+            console.error('Error al guardar servicio:', error);
+            showToast(error.response?.data?.message || 'Error al guardar servicio', 'error');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleEliminarServicio = async (servicio) => {
+        showConfirm(
+            `¿Eliminar servicio "${servicio.nombre}"?`,
+            'Este servicio dejará de estar disponible para nuevas citas. Las citas existentes no se verán afectadas.',
+            async () => {
+                setLoading(true);
+                try {
+                    await serviciosAPI.eliminar(servicio.idSer);
+                    showToast('Servicio eliminado exitosamente', 'success');
+                    cargarServicios();
+                } catch (error) {
+                    console.error('Error al eliminar servicio:', error);
+                    showToast(error.response?.data?.message || 'Error al eliminar servicio', 'error');
+                } finally {
+                    setLoading(false);
+                }
+            },
+            'danger'
+        );
+    };
+
+    // ==================== FIN FUNCIONES DE SERVICIOS ====================
+
     const exportarDatos = () => {
         const headers = ['ID', 'Fecha', 'Hora', 'Cliente', 'Cédula', 'Barbero', 'Servicios', 'Total', 'Estado', 'Método Pago'];
         const rows = todasLasCitas.map(cita => [
@@ -657,6 +793,17 @@ export default function AdminDashboard() {
                     >
                         <FaCogs size={18} />
                         <span>Gestión</span>
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('servicios')}
+                        className={`flex items-center space-x-2 px-6 py-3 rounded-lg font-semibold transition-all ${
+                            activeTab === 'servicios'
+                                ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-lg'
+                                : 'bg-white text-gray-700 hover:bg-gray-50'
+                        }`}
+                    >
+                        <FaCut size={18} />
+                        <span>Servicios</span>
                     </button>
                 </div>
 
@@ -1797,6 +1944,243 @@ export default function AdminDashboard() {
                                     </div>
                                 </div>
                             )}
+                        </Modal>
+                    </div>
+                )}
+
+                {/* SERVICIOS */}
+                {activeTab === 'servicios' && (
+                    <div className="space-y-6 animate-fadeIn">
+                        {/* Header con búsqueda y botón crear */}
+                        <div className="card">
+                            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                                <div className="flex items-center space-x-3">
+                                    <FaCut className="w-7 h-7 text-primary" />
+                                    <div>
+                                        <h2 className="text-2xl font-bold text-gray-800">Gestión de Servicios</h2>
+                                        <p className="text-sm text-gray-600">Administra los servicios disponibles en la barbería</p>
+                                    </div>
+                                </div>
+
+                                <button
+                                    onClick={() => abrirModalServicio()}
+                                    className="btn-primary flex items-center space-x-2"
+                                >
+                                    <FaCut />
+                                    <span>Nuevo Servicio</span>
+                                </button>
+                            </div>
+
+                            {/* Barra de búsqueda */}
+                            <div className="mt-4 relative">
+                                <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                                <input
+                                    type="text"
+                                    value={busquedaServicio}
+                                    onChange={(e) => {
+                                        setBusquedaServicio(e.target.value);
+                                        setCurrentPageServicios(1);
+                                    }}
+                                    placeholder="Buscar servicio por nombre..."
+                                    className="input-field pl-10 pr-10"
+                                />
+                                {busquedaServicio && (
+                                    <button
+                                        onClick={() => {
+                                            setBusquedaServicio('');
+                                            setCurrentPageServicios(1);
+                                        }}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                                    >
+                                        <FaTimes size={18} />
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Tabla de servicios */}
+                        <div className="card">
+                            {loadingServicios ? (
+                                <div className="py-12">
+                                    <div className="flex items-center justify-center space-x-3">
+                                        <FaSync className="animate-spin text-primary w-8 h-8" />
+                                        <p className="text-gray-600 text-lg">Cargando servicios...</p>
+                                    </div>
+                                </div>
+                            ) : filtrarServicios().length === 0 ? (
+                                <div className="text-center py-12">
+                                    <FaCut className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                                    <p className="text-gray-500 text-lg mb-2">
+                                        {busquedaServicio ? 'No se encontraron servicios' : 'No hay servicios registrados'}
+                                    </p>
+                                    {busquedaServicio && (
+                                        <button
+                                            onClick={() => setBusquedaServicio('')}
+                                            className="btn-outline mt-4"
+                                        >
+                                            <FaTimes className="inline mr-2" />
+                                            Limpiar búsqueda
+                                        </button>
+                                    )}
+                                </div>
+                            ) : (
+                                <>
+                                    <div className="overflow-x-auto custom-scrollbar">
+                                        <table className="table-retro">
+                                            <thead>
+                                                <tr>
+                                                    <th>Servicio</th>
+                                                    <th className="text-center">Duración (min)</th>
+                                                    <th className="text-right">Precio</th>
+                                                    <th className="text-center">Acciones</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {getServiciosPaginados().map((servicio) => (
+                                                    <tr key={servicio.idSer}>
+                                                        <td className="font-semibold">
+                                                            <div className="flex items-center space-x-2">
+                                                                <FaCut className="text-primary" />
+                                                                <span>{servicio.nombre}</span>
+                                                            </div>
+                                                        </td>
+                                                        <td className="text-center">
+                                                            <span className="badge badge-info">
+                                                                <FaClock className="inline w-3 h-3 mr-1" />
+                                                                {servicio.duracion} min
+                                                            </span>
+                                                        </td>
+                                                        <td className="text-right">
+                                                            <span className="text-lg font-bold text-primary">
+                                                                ${parseFloat(servicio.precio).toLocaleString('es-CO')}
+                                                            </span>
+                                                        </td>
+                                                        <td>
+                                                            <div className="flex items-center justify-center space-x-2">
+                                                                <button
+                                                                    onClick={() => abrirModalServicio(servicio)}
+                                                                    className="btn-icon btn-icon-primary"
+                                                                    title="Editar servicio"
+                                                                >
+                                                                    <FaEdit />
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => handleEliminarServicio(servicio)}
+                                                                    className="btn-icon btn-icon-danger"
+                                                                    title="Eliminar servicio"
+                                                                    disabled={loading}
+                                                                >
+                                                                    <FaTrash />
+                                                                </button>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+
+                                    {/* Paginación */}
+                                    {filtrarServicios().length > itemsPerPage && (
+                                        <div className="mt-6">
+                                            <Pagination
+                                                currentPage={currentPageServicios}
+                                                totalPages={getTotalPages(filtrarServicios().length)}
+                                                onPageChange={setCurrentPageServicios}
+                                                itemsPerPage={itemsPerPage}
+                                                totalItems={filtrarServicios().length}
+                                            />
+                                        </div>
+                                    )}
+                                </>
+                            )}
+                        </div>
+
+                        {/* Modal Crear/Editar Servicio */}
+                        <Modal
+                            isOpen={modalServicio}
+                            onClose={cerrarModalServicio}
+                            title={servicioEditar ? 'Editar Servicio' : 'Nuevo Servicio'}
+                        >
+                            <form onSubmit={handleGuardarServicio} className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-bold text-gray-700 mb-2">
+                                        <FaCut className="inline mr-1" />
+                                        Nombre del Servicio
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={formServicio.nombre}
+                                        onChange={(e) => setFormServicio({ ...formServicio, nombre: e.target.value })}
+                                        className="input-field"
+                                        placeholder="Ej: Corte de cabello, Barba, etc."
+                                        required
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-bold text-gray-700 mb-2">
+                                        <FaClock className="inline mr-1" />
+                                        Duración (minutos)
+                                    </label>
+                                    <input
+                                        type="number"
+                                        value={formServicio.duracion}
+                                        onChange={(e) => setFormServicio({ ...formServicio, duracion: e.target.value })}
+                                        className="input-field"
+                                        placeholder="Ej: 30, 45, 60"
+                                        min="1"
+                                        required
+                                    />
+                                    <p className="text-xs text-gray-500 mt-1">Tiempo estimado del servicio</p>
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-bold text-gray-700 mb-2">
+                                        <FaMoneyBillWave className="inline mr-1" />
+                                        Precio (COP)
+                                    </label>
+                                    <input
+                                        type="number"
+                                        value={formServicio.precio}
+                                        onChange={(e) => setFormServicio({ ...formServicio, precio: e.target.value })}
+                                        className="input-field"
+                                        placeholder="Ej: 15000, 20000"
+                                        min="0"
+                                        step="1000"
+                                        required
+                                    />
+                                    <p className="text-xs text-gray-500 mt-1">Precio del servicio en pesos colombianos</p>
+                                </div>
+
+                                <div className="flex justify-end space-x-3 pt-4">
+                                    <button
+                                        type="button"
+                                        onClick={cerrarModalServicio}
+                                        className="btn-outline"
+                                        disabled={loading}
+                                    >
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={loading}
+                                        className="btn-primary disabled:opacity-50"
+                                    >
+                                        {loading ? (
+                                            <span className="flex items-center space-x-2">
+                                                <FaSync className="animate-spin" />
+                                                <span>Guardando...</span>
+                                            </span>
+                                        ) : (
+                                            <span className="flex items-center space-x-2">
+                                                <FaCheckCircle />
+                                                <span>{servicioEditar ? 'Actualizar' : 'Crear'} Servicio</span>
+                                            </span>
+                                        )}
+                                    </button>
+                                </div>
+                            </form>
                         </Modal>
                     </div>
                 )}
