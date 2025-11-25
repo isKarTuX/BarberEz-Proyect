@@ -211,6 +211,9 @@ export default function ClienteDashboard() {
 
     const getHistorialPaginado = () => paginate(getHistorialFiltrado(), currentPageHistorial);
 
+    // Memoizar historial filtrado para poder usar su longitud en efectos
+    const historialFiltradoMemo = React.useMemo(() => getHistorialFiltrado(), [historialCitas, filtros]);
+
     useEffect(() => {
         cargarBarberos();
         cargarServicios();
@@ -227,6 +230,21 @@ export default function ClienteDashboard() {
     useEffect(() => {
         setCurrentPageHistorial(1);
     }, [filtros]);
+
+    // Ajustar currentPage cuando cambian itemsPerPage o el número total de items
+    useEffect(() => {
+        const totalPendientesPages = Math.ceil(citasPendientes.length / itemsPerPage) || 1;
+        if (currentPagePendientes > totalPendientesPages) {
+            setCurrentPagePendientes(1);
+        }
+    }, [itemsPerPage, citasPendientes.length]);
+
+    useEffect(() => {
+        const totalHistPages = Math.ceil(historialFiltradoMemo.length / itemsPerPage) || 1;
+        if (currentPageHistorial > totalHistPages) {
+            setCurrentPageHistorial(1);
+        }
+    }, [itemsPerPage, historialFiltradoMemo.length]);
 
     // Limpiar la hora seleccionada cuando cambia la fecha
     useEffect(() => {
