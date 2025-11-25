@@ -16,6 +16,7 @@ import Modal from '../components/Modal';
 import Toast from '../components/Toast';
 import ConfirmModal from '../components/ConfirmModal';
 import LayoutControl from '../components/LayoutControl';
+import CitaCardSkeleton from '../components/CitaCardSkeleton';
 import Pagination from '../components/Pagination';
 
 export default function AdminDashboard() {
@@ -32,26 +33,40 @@ export default function AdminDashboard() {
     const [barberos, setBarberos] = useState([]);
 
     // Layout y paginación
-    const [layoutColumns, setLayoutColumns] = useState(2);
-    const [layoutSize, setLayoutSize] = useState('normal');
+    const [layoutColumns, setLayoutColumns] = useState(() => {
+        const saved = localStorage.getItem('adminLayoutColumns');
+        return saved ? parseInt(saved) : 2;
+    });
+    const [layoutSize, setLayoutSize] = useState(() => {
+        return localStorage.getItem('adminLayoutSize') || 'normal';
+    });
     const [currentPageCitas, setCurrentPageCitas] = useState(1);
     const [currentPageClientes, setCurrentPageClientes] = useState(1);
     const [currentPageBarberos, setCurrentPageBarberos] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(12);
+    const [customItemsPerPage, setCustomItemsPerPage] = useState(() => {
+        const saved = localStorage.getItem('adminItemsPerPage');
+        return saved ? parseInt(saved) : null;
+    });
 
     // Estados de filtros
-    const [filtros, setFiltros] = useState({
-        busqueda: '',
-        estado: '',
-        idBarbero: '',
-        fechaInicio: '',
-        fechaFin: '',
-        fecha: '',
-        metodoPago: ''
+    const [filtros, setFiltros] = useState(() => {
+        const saved = localStorage.getItem('adminFiltrosCitas');
+        return saved ? JSON.parse(saved) : {
+            busqueda: '',
+            estado: '',
+            idBarbero: '',
+            fechaInicio: '',
+            fechaFin: '',
+            metodoPago: ''
+        };
     });
 
     const [buscando, setBuscando] = useState(false);
+    const [loadingCitas, setLoadingCitas] = useState(false);
+    const [loadingGestion, setLoadingGestion] = useState(false);
     const [mostrarFiltrosAvanzados, setMostrarFiltrosAvanzados] = useState(false);
+    const [timerBusqueda, setTimerBusqueda] = useState(null);
 
     // Formulario crear cuenta
     const [formCuenta, setFormCuenta] = useState({
@@ -116,6 +131,11 @@ export default function AdminDashboard() {
 
     // Ajustar items por página según layout
     useEffect(() => {
+        if (customItemsPerPage) {
+            setItemsPerPage(customItemsPerPage);
+            return;
+        }
+        
         let items = 12;
         if (layoutColumns === 1) {
             items = layoutSize === 'compact' ? 15 : layoutSize === 'comfortable' ? 8 : 10;
@@ -125,7 +145,44 @@ export default function AdminDashboard() {
             items = layoutSize === 'compact' ? 30 : layoutSize === 'comfortable' ? 18 : 24;
         }
         setItemsPerPage(items);
-    }, [layoutColumns, layoutSize]);
+    }, [layoutColumns, layoutSize, customItemsPerPage]);
+
+    // Persistir configuración de layout
+    useEffect(() => {
+        localStorage.setItem('adminLayoutColumns', layoutColumns.toString());
+    }, [layoutColumns]);
+
+    useEffect(() => {
+        localStorage.setItem('adminLayoutSize', layoutSize);
+    }, [layoutSize]);
+
+    useEffect(() => {
+        if (customItemsPerPage) {
+            localStorage.setItem('adminItemsPerPage', customItemsPerPage.toString());
+        }
+    }, [customItemsPerPage]);
+
+    // Persistir filtros
+    useEffect(() => {
+        localStorage.setItem('adminFiltrosCitas', JSON.stringify(filtros));
+    }, [filtros]);
+
+    // Búsqueda con debounce automático
+    useEffect(() => {
+        if (activeTab === 'citas') {
+            if (timerBusqueda) {
+                clearTimeout(timerBusqueda);
+            }
+            
+            const timer = setTimeout(() => {
+                buscarCitas();
+            }, 800);
+            
+            setTimerBusqueda(timer);
+            
+            return () => clearTimeout(timer);
+        }
+    }, [filtros, activeTab]);
 
     // Funciones de paginación
     const paginate = (items, currentPage) => {
@@ -266,6 +323,7 @@ export default function AdminDashboard() {
 
     const buscarCitas = async () => {
         setBuscando(true);
+        setLoadingCitas(true);
         try {
             const filtrosLimpios = Object.fromEntries(
                 Object.entries(filtros).filter(([_, v]) => v !== '')
@@ -280,8 +338,10 @@ export default function AdminDashboard() {
             console.log('🔍 Búsqueda en BD completada:', response.data.meta);
         } catch (error) {
             console.error('Error al buscar citas:', error);
+            showToast('Error al buscar citas', 'error');
         } finally {
             setBuscando(false);
+            setLoadingCitas(false);
         }
     };
 
@@ -292,10 +352,9 @@ export default function AdminDashboard() {
             idBarbero: '',
             fechaInicio: '',
             fechaFin: '',
-            fecha: '',
             metodoPago: ''
         });
-        setTimeout(() => buscarCitas(), 100);
+        setCurrentPageCitas(1);
     };
 
     const handleCrearCuenta = async (e) => {
@@ -329,6 +388,7 @@ export default function AdminDashboard() {
     // ==================== FUNCIONES DE GESTIÓN ====================
 
     const cargarClientes = async () => {
+        setLoadingGestion(true);
         try {
             const response = await adminAPI.getAllClientes({ busqueda: filtroGestion });
             let clientesOrdenados = [...response.data.data];
@@ -349,10 +409,14 @@ export default function AdminDashboard() {
             setClientes(clientesOrdenados);
         } catch (error) {
             console.error('Error al cargar clientes:', error);
+            showToast('Error al cargar clientes', 'error');
+        } finally {
+            setLoadingGestion(false);
         }
     };
 
     const cargarBarberosGestion = async () => {
+        setLoadingGestion(true);
         try {
             const response = await adminAPI.getAllBarberosGestion({ busqueda: filtroGestion });
             let barberosOrdenados = [...response.data.data];
@@ -373,6 +437,9 @@ export default function AdminDashboard() {
             setBarberosGestion(barberosOrdenados);
         } catch (error) {
             console.error('Error al cargar barberos:', error);
+            showToast('Error al cargar barberos', 'error');
+        } finally {
+            setLoadingGestion(false);
         }
     };
 
@@ -739,6 +806,17 @@ export default function AdminDashboard() {
                 {/* CITAS */}
                 {activeTab === 'citas' && (
                     <div className="space-y-6 animate-fadeIn">
+                        {/* LayoutControl */}
+                        <LayoutControl
+                            columns={layoutColumns}
+                            onColumnsChange={setLayoutColumns}
+                            size={layoutSize}
+                            onSizeChange={setLayoutSize}
+                            itemsPerPage={customItemsPerPage || itemsPerPage}
+                            onItemsPerPageChange={setCustomItemsPerPage}
+                            totalItems={todasLasCitas.length}
+                        />
+
                         {/* Barra de búsqueda */}
                         <div className="card">
                             <div className="flex flex-col md:flex-row gap-4">
@@ -748,7 +826,6 @@ export default function AdminDashboard() {
                                         type="text"
                                         value={filtros.busqueda}
                                         onChange={(e) => setFiltros({ ...filtros, busqueda: e.target.value })}
-                                        onKeyPress={(e) => e.key === 'Enter' && buscarCitas()}
                                         placeholder="Buscar por nombre, cédula, correo..."
                                         className="input-field pl-10 pr-10"
                                     />
@@ -762,23 +839,6 @@ export default function AdminDashboard() {
                                     )}
                                 </div>
                                 <button
-                                    onClick={buscarCitas}
-                                    disabled={buscando}
-                                    className="btn-primary flex items-center space-x-2 px-6"
-                                >
-                                    {buscando ? (
-                                        <>
-                                            <FaSync className="animate-spin" />
-                                            <span>Buscando...</span>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <FaDatabase />
-                                            <span>Buscar en BD</span>
-                                        </>
-                                    )}
-                                </button>
-                                <button
                                     onClick={() => setMostrarFiltrosAvanzados(!mostrarFiltrosAvanzados)}
                                     className="btn-secondary flex items-center space-x-2 px-6"
                                 >
@@ -791,6 +851,14 @@ export default function AdminDashboard() {
                                     )}
                                 </button>
                             </div>
+
+                            {/* Indicador de búsqueda en progreso */}
+                            {loadingCitas && (
+                                <div className="mt-3 flex items-center space-x-2 text-sm text-gray-600">
+                                    <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+                                    <span>Buscando en base de datos...</span>
+                                </div>
+                            )}
                         </div>
 
                         {/* Panel de filtros avanzados */}
@@ -863,19 +931,6 @@ export default function AdminDashboard() {
                                         </select>
                                     </div>
 
-                                    {/* Fecha específica */}
-                                    <div>
-                                        <label className="block text-sm font-semibold text-gray-700 mb-2">
-                                            Fecha Específica
-                                        </label>
-                                        <input
-                                            type="date"
-                                            value={filtros.fecha}
-                                            onChange={(e) => setFiltros({ ...filtros, fecha: e.target.value })}
-                                            className="input-field"
-                                        />
-                                    </div>
-
                                     {/* Fecha inicio */}
                                     <div>
                                         <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -903,20 +958,13 @@ export default function AdminDashboard() {
                                     </div>
                                 </div>
 
-                                {/* Botón aplicar filtros */}
+                                {/* Botón limpiar filtros */}
                                 <div className="mt-6 flex justify-end space-x-3">
                                     <button
                                         onClick={limpiarFiltros}
                                         className="btn-outline"
                                     >
-                                        Limpiar
-                                    </button>
-                                    <button
-                                        onClick={buscarCitas}
-                                        className="btn-primary flex items-center space-x-2"
-                                    >
-                                        <FaDatabase />
-                                        <span>Aplicar Filtros</span>
+                                        Limpiar Todos
                                     </button>
                                 </div>
                             </div>
@@ -954,9 +1002,6 @@ export default function AdminDashboard() {
                                 <h2 className="text-2xl font-bold text-gray-800 flex items-center space-x-2">
                                     <FaCalendarCheck className="text-primary" />
                                     <span>Resultados ({todasLasCitas.length})</span>
-                                    {buscando && (
-                                        <FaSync className="text-primary animate-spin" />
-                                    )}
                                 </h2>
                                 <button
                                     onClick={exportarDatos}
@@ -968,64 +1013,87 @@ export default function AdminDashboard() {
                                 </button>
                             </div>
 
-                            {todasLasCitas.length === 0 ? (
+                            {loadingCitas ? (
+                                <div className="py-12">
+                                    <div className="flex items-center justify-center space-x-3 mb-4">
+                                        <FaSync className="animate-spin text-primary w-8 h-8" />
+                                        <p className="text-gray-600 text-lg">Cargando citas...</p>
+                                    </div>
+                                </div>
+                            ) : todasLasCitas.length === 0 ? (
                                 <div className="text-center py-12">
                                     <FaDatabase className="w-16 h-16 text-gray-300 mx-auto mb-4" />
                                     <p className="text-gray-500 text-lg">No se encontraron citas con estos filtros</p>
-                                    <button
-                                        onClick={limpiarFiltros}
-                                        className="mt-4 text-primary hover:text-secondary font-semibold"
-                                    >
-                                        Limpiar filtros y ver todas
-                                    </button>
+                                    {contarFiltrosActivos() > 0 && (
+                                        <button
+                                            onClick={limpiarFiltros}
+                                            className="mt-4 text-primary hover:text-secondary font-semibold"
+                                        >
+                                            Limpiar filtros y ver todas
+                                        </button>
+                                    )}
                                 </div>
                             ) : (
-                                <div className="overflow-x-auto custom-scrollbar">
-                                    <table className="table-retro">
-                                        <thead>
-                                            <tr>
-                                                <th>ID</th>
-                                                <th>Fecha</th>
-                                                <th>Hora</th>
-                                                <th>Cliente</th>
-                                                <th>Cédula</th>
-                                                <th>Barbero</th>
-                                                <th>Servicios</th>
-                                                <th>Método</th>
-                                                <th className="text-right">Total</th>
-                                                <th className="text-center">Estado</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {getCitasPaginadas().map((cita) => (
+                                <>
+                                    <div className="overflow-x-auto custom-scrollbar">
+                                        <table className="table-retro table-optimized">
+                                            <thead>
+                                                <tr>
+                                                    <th className="table-cell-sm">ID</th>
+                                                    <th className="table-cell-md">Fecha</th>
+                                                    <th className="table-cell-sm">Hora</th>
+                                                    <th className="table-cell-lg">Cliente</th>
+                                                    <th className="table-cell-lg">Barbero</th>
+                                                    <th className="table-cell-xl">Servicios</th>
+                                                    <th className="table-cell-md">Método</th>
+                                                    <th className="text-right table-cell-md">Total</th>
+                                                    <th className="text-center table-cell-md">Estado</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {getCitasPaginadas().map((cita) => (
                                                 <tr key={cita.idCita}>
-                                                    <td className="font-mono text-sm">#{cita.idCita}</td>
-                                                    <td className="font-semibold whitespace-nowrap">
-                                                        {new Date(cita.fecha).toLocaleDateString('es-CO', {
-                                                            day: '2-digit',
-                                                            month: 'short',
-                                                            year: 'numeric'
-                                                        })}
+                                                    <td className="font-mono text-sm table-cell-sm">
+                                                        #{cita.idCita}
                                                     </td>
-                                                    <td className="font-mono">{cita.horaIn?.substring(0, 5)}</td>
-                                                    <td>
-                                                        <div>
+                                                    <td className="font-semibold table-cell-md">
+                                                        <span className="table-cell-content">
+                                                            {new Date(cita.fecha).toLocaleDateString('es-CO', {
+                                                                day: '2-digit',
+                                                                month: 'short',
+                                                                year: 'numeric'
+                                                            })}
+                                                        </span>
+                                                    </td>
+                                                    <td className="font-mono table-cell-sm">
+                                                        {cita.horaIn?.substring(0, 5)}
+                                                    </td>
+                                                    <td className="table-cell-lg table-cell-tooltip" 
+                                                        data-tooltip={`${cita.nombreCliente} - ${cita.correoCliente}`}>
+                                                        <div className="table-cell-content">
                                                             <p className="font-semibold">{cita.nombreCliente}</p>
                                                             <p className="text-xs text-gray-500">{cita.correoCliente}</p>
                                                         </div>
                                                     </td>
-                                                    <td className="font-mono text-sm">{cita.cedulaCliente}</td>
-                                                    <td className="whitespace-nowrap">{cita.nombreBarbero}</td>
-                                                    <td className="text-sm text-gray-600">{cita.servicios}</td>
-                                                    <td>
-                                                        <span className="text-xs bg-gray-100 px-2 py-1 rounded whitespace-nowrap">
+                                                    <td className="table-cell-lg table-cell-tooltip" 
+                                                        data-tooltip={cita.nombreBarbero}>
+                                                        <span className="table-cell-content">{cita.nombreBarbero}</span>
+                                                    </td>
+                                                    <td className="table-cell-xl table-cell-tooltip"
+                                                        data-tooltip={cita.servicios}>
+                                                        <span className="text-sm text-gray-600 table-cell-content">
+                                                            {cita.servicios}
+                                                        </span>
+                                                    </td>
+                                                    <td className="table-cell-md">
+                                                        <span className="text-xs bg-gray-100 px-2 py-1 rounded">
                                                             {cita.metodoPago || 'N/A'}
                                                         </span>
                                                     </td>
-                                                    <td className="text-right font-bold text-primary whitespace-nowrap">
+                                                    <td className="text-right font-bold text-primary table-cell-md">
                                                         ${cita.total?.toLocaleString()}
                                                     </td>
-                                                    <td className="text-center">
+                                                    <td className="text-center table-cell-md">
                                                         <span className={`badge whitespace-nowrap ${
                                                             cita.estado === 'completada' ? 'badge-success' :
                                                             cita.estado === 'confirmada' ? 'badge-info' :
@@ -1043,17 +1111,20 @@ export default function AdminDashboard() {
                                         </tbody>
                                     </table>
                                 </div>
-                            )}
 
-                            {/* Paginación */}
-                            {todasLasCitas.length > 0 && (
-                                <Pagination
-                                    currentPage={currentPageCitas}
-                                    totalPages={getTotalPages(todasLasCitas.length)}
-                                    onPageChange={setCurrentPageCitas}
-                                    itemsPerPage={itemsPerPage}
-                                    totalItems={todasLasCitas.length}
-                                />
+                                {/* Paginación */}
+                                {todasLasCitas.length > itemsPerPage && (
+                                    <div className="mt-6">
+                                        <Pagination
+                                            currentPage={currentPageCitas}
+                                            totalPages={getTotalPages(todasLasCitas.length)}
+                                            onPageChange={setCurrentPageCitas}
+                                            itemsPerPage={itemsPerPage}
+                                            totalItems={todasLasCitas.length}
+                                        />
+                                    </div>
+                                )}
+                            </>
                             )}
                         </div>
                     </div>
@@ -1306,7 +1377,14 @@ export default function AdminDashboard() {
                                     <span>Gestión de Clientes ({filtrarYOrdenarClientes().length})</span>
                                 </h2>
 
-                                {filtrarYOrdenarClientes().length === 0 ? (
+                                {loadingGestion ? (
+                                    <div className="py-12">
+                                        <div className="flex items-center justify-center space-x-3">
+                                            <FaSync className="animate-spin text-primary w-8 h-8" />
+                                            <p className="text-gray-600 text-lg">Cargando clientes...</p>
+                                        </div>
+                                    </div>
+                                ) : filtrarYOrdenarClientes().length === 0 ? (
                                     <div className="text-center py-12">
                                         <FaUserFriends className="w-16 h-16 text-gray-300 mx-auto mb-4" />
                                         <p className="text-gray-500">No se encontraron clientes</p>
@@ -1400,13 +1478,17 @@ export default function AdminDashboard() {
                                     </div>
 
                                     {/* Paginación */}
-                                    <Pagination
-                                        currentPage={currentPageClientes}
-                                        totalPages={getTotalPages(filtrarYOrdenarClientes().length)}
-                                        onPageChange={setCurrentPageClientes}
-                                        itemsPerPage={itemsPerPage}
-                                        totalItems={filtrarYOrdenarClientes().length}
-                                    />
+                                    {filtrarYOrdenarClientes().length > itemsPerPage && (
+                                        <div className="mt-6">
+                                            <Pagination
+                                                currentPage={currentPageClientes}
+                                                totalPages={getTotalPages(filtrarYOrdenarClientes().length)}
+                                                onPageChange={setCurrentPageClientes}
+                                                itemsPerPage={itemsPerPage}
+                                                totalItems={filtrarYOrdenarClientes().length}
+                                            />
+                                        </div>
+                                    )}
                                     </>
                                 )}
                             </div>
@@ -1420,7 +1502,14 @@ export default function AdminDashboard() {
                                     <span>Gestión de Barberos ({filtrarYOrdenarBarberos().length})</span>
                                 </h2>
 
-                                {filtrarYOrdenarBarberos().length === 0 ? (
+                                {loadingGestion ? (
+                                    <div className="py-12">
+                                        <div className="flex items-center justify-center space-x-3">
+                                            <FaSync className="animate-spin text-primary w-8 h-8" />
+                                            <p className="text-gray-600 text-lg">Cargando barberos...</p>
+                                        </div>
+                                    </div>
+                                ) : filtrarYOrdenarBarberos().length === 0 ? (
                                     <div className="text-center py-12">
                                         <FaUserTie className="w-16 h-16 text-gray-300 mx-auto mb-4" />
                                         <p className="text-gray-500">No se encontraron barberos</p>
@@ -1521,13 +1610,17 @@ export default function AdminDashboard() {
                                     </div>
 
                                     {/* Paginación */}
-                                    <Pagination
-                                        currentPage={currentPageBarberos}
-                                        totalPages={getTotalPages(filtrarYOrdenarBarberos().length)}
-                                        onPageChange={setCurrentPageBarberos}
-                                        itemsPerPage={itemsPerPage}
-                                        totalItems={filtrarYOrdenarBarberos().length}
-                                    />
+                                    {filtrarYOrdenarBarberos().length > itemsPerPage && (
+                                        <div className="mt-6">
+                                            <Pagination
+                                                currentPage={currentPageBarberos}
+                                                totalPages={getTotalPages(filtrarYOrdenarBarberos().length)}
+                                                onPageChange={setCurrentPageBarberos}
+                                                itemsPerPage={itemsPerPage}
+                                                totalItems={filtrarYOrdenarBarberos().length}
+                                            />
+                                        </div>
+                                    )}
                                     </>
                                 )}
                             </div>

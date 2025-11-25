@@ -1,27 +1,39 @@
-import React from 'react';
+import React, { memo, useMemo } from 'react';
 import { FaChevronLeft, FaChevronRight } from 'react-icons/fa';
 
-export default function Pagination({
+const Pagination = memo(function Pagination({
     currentPage,
     totalPages,
     onPageChange,
     itemsPerPage,
     totalItems
 }) {
-    const pages = [];
-    const maxVisiblePages = 5;
+    // Memoizar cálculo de páginas visibles para evitar re-cálculos innecesarios
+    const { pages, startPage, endPage } = useMemo(() => {
+        const pages = [];
+        const maxVisiblePages = 5;
 
-    // Calcular el rango de páginas a mostrar
-    let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
-    let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+        // Calcular el rango de páginas a mostrar
+        let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+        let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
 
-    if (endPage - startPage < maxVisiblePages - 1) {
-        startPage = Math.max(1, endPage - maxVisiblePages + 1);
-    }
+        if (endPage - startPage < maxVisiblePages - 1) {
+            startPage = Math.max(1, endPage - maxVisiblePages + 1);
+        }
 
-    for (let i = startPage; i <= endPage; i++) {
-        pages.push(i);
-    }
+        for (let i = startPage; i <= endPage; i++) {
+            pages.push(i);
+        }
+
+        return { pages, startPage, endPage };
+    }, [currentPage, totalPages]);
+
+    // Memoizar información de items
+    const itemsInfo = useMemo(() => {
+        const start = Math.min((currentPage - 1) * itemsPerPage + 1, totalItems);
+        const end = Math.min(currentPage * itemsPerPage, totalItems);
+        return `Mostrando ${start} - ${end} de ${totalItems} items`;
+    }, [currentPage, itemsPerPage, totalItems]);
 
     if (totalPages === 0) return null;
 
@@ -30,7 +42,7 @@ export default function Pagination({
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
                 {/* Info de items */}
                 <div className="text-sm text-gray-600">
-                    Mostrando {Math.min((currentPage - 1) * itemsPerPage + 1, totalItems)} - {Math.min(currentPage * itemsPerPage, totalItems)} de {totalItems} items
+                    {itemsInfo}
                 </div>
 
                 {/* Controles de paginación */}
@@ -95,13 +107,21 @@ export default function Pagination({
                         onClick={() => onPageChange(currentPage + 1)}
                         disabled={currentPage === totalPages}
                         className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center space-x-1"
+                        aria-label="Página siguiente"
                     >
                         <span className="hidden sm:inline">Siguiente</span>
-                        <FaChevronRight size={12} />
+                        <FaChevronRight size={12} aria-hidden="true" />
                     </button>
                 </div>
             </div>
         </div>
     );
-}
+}, (prevProps, nextProps) => {
+    // Solo re-renderizar si cambian props relevantes
+    return prevProps.currentPage === nextProps.currentPage &&
+           prevProps.totalPages === nextProps.totalPages &&
+           prevProps.totalItems === nextProps.totalItems;
+});
+
+export default Pagination;
 

@@ -24,27 +24,46 @@ const PORT = process.env.PORT || 5000;
 // =========================================
 
 // CORS - Permitir peticiones desde el frontend
+const allowedOrigins = [
+    process.env.FRONTEND_URL,
+    'http://localhost:5173',
+    'http://localhost:3000',
+    'http://localhost:5000',
+    'http://127.0.0.1:5173'
+].filter(Boolean); // Eliminar valores undefined
+
 app.use(cors({
     origin: function (origin, callback) {
-        // Permitir peticiones sin origin (como Postman) o desde localhost en desarrollo
-        if (!origin || origin.startsWith('http://localhost:')) {
-            callback(null, true);
-        } else if (process.env.FRONTEND_URL && origin === process.env.FRONTEND_URL) {
+        // En desarrollo, permitir cualquier origen
+        if (process.env.NODE_ENV !== 'production') {
+            return callback(null, true);
+        }
+        
+        // Permitir peticiones sin origin (como Postman, mobile apps, etc)
+        if (!origin) {
+            return callback(null, true);
+        }
+        
+        if (allowedOrigins.includes(origin)) {
             callback(null, true);
         } else {
             callback(new Error('Not allowed by CORS'));
         }
     },
-    credentials: true
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 // Parser de JSON
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Logging de requests
+// Logging de requests con más información
 app.use((req, res, next) => {
-    console.log(`${req.method} ${req.url}`);
+    const timestamp = new Date().toISOString();
+    const ip = req.ip || req.connection.remoteAddress;
+    console.log(`[${timestamp}] ${req.method} ${req.url} - IP: ${ip}`);
     next();
 });
 

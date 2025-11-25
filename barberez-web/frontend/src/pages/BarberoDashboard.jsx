@@ -5,7 +5,7 @@ import {
     FaCut, FaSignOutAlt, FaCalendarDay, FaClipboardList, FaChartLine,
     FaClock, FaMoneyBillWave, FaFilter, FaTimes, FaSearch, FaCheckCircle,
     FaTimesCircle, FaHourglassHalf, FaCheck, FaBan, FaInfoCircle,
-    FaCalendarAlt, FaUser, FaDollarSign, FaChevronDown, FaChevronUp, FaSortAmountDown, FaSortAmountUp
+    FaCalendarAlt, FaUser, FaDollarSign, FaChevronDown, FaChevronUp, FaSortAmountDown, FaSortAmountUp, FaSync
 } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
 import Toast from '../components/Toast';
@@ -13,6 +13,7 @@ import ConfirmModal from '../components/ConfirmModal';
 import ToggleSwitch from '../components/ToggleSwitch';
 import LayoutControl from '../components/LayoutControl';
 import CitaCard from '../components/CitaCard';
+import CitaCardSkeleton from '../components/CitaCardSkeleton';
 import Pagination from '../components/Pagination';
 
 export default function BarberoDashboard() {
@@ -26,18 +27,31 @@ export default function BarberoDashboard() {
     const [todasCitas, setTodasCitas] = useState([]);
     const [estadisticas, setEstadisticas] = useState(null);
     const [loading, setLoading] = useState(false);
+    const [loadingHoy, setLoadingHoy] = useState(false);
+    const [loadingPendientes, setLoadingPendientes] = useState(false);
+    const [loadingConfirmadas, setLoadingConfirmadas] = useState(false);
+    const [loadingHistorial, setLoadingHistorial] = useState(false);
     const [serviciosDisponibles, setServiciosDisponibles] = useState([]);
 
     // Layout y visualización
-    const [layoutColumns, setLayoutColumns] = useState(2);
-    const [layoutSize, setLayoutSize] = useState('normal');
+    const [layoutColumns, setLayoutColumns] = useState(() => {
+        const saved = localStorage.getItem('barberoLayoutColumns');
+        return saved ? parseInt(saved) : 2;
+    });
+    const [layoutSize, setLayoutSize] = useState(() => {
+        return localStorage.getItem('barberoLayoutSize') || 'normal';
+    });
 
     // Paginación
     const [currentPageHoy, setCurrentPageHoy] = useState(1);
     const [currentPagePendientes, setCurrentPagePendientes] = useState(1);
     const [currentPageConfirmadas, setCurrentPageConfirmadas] = useState(1);
     const [currentPageHistorial, setCurrentPageHistorial] = useState(1);
-    const [itemsPerPage, setItemsPerPage] = useState(12); // Ajustable según columnas y tamaño
+    const [itemsPerPage, setItemsPerPage] = useState(12);
+    const [customItemsPerPage, setCustomItemsPerPage] = useState(() => {
+        const saved = localStorage.getItem('barberoItemsPerPage');
+        return saved ? parseInt(saved) : null;
+    });
 
     // Filtros para "Hoy"
     const [filtroHoyEstado, setFiltroHoyEstado] = useState('todas'); // 'todas', 'pendiente', 'confirmada', 'completada'
@@ -105,13 +119,18 @@ export default function BarberoDashboard() {
     });
 
     // Filtros para historial (mantener los existentes)
-    const [filtros, setFiltros] = useState({
-        fechaInicio: '',
-        fechaFin: '',
-        estado: '',
-        busqueda: ''
+    const [filtros, setFiltros] = useState(() => {
+        const saved = localStorage.getItem('barberoFiltros');
+        return saved ? JSON.parse(saved) : {
+            fechaInicio: '',
+            fechaFin: '',
+            estado: '',
+            busqueda: '',
+            ordenFecha: 'desc' // desc = más recientes primero
+        };
     });
     const [mostrarFiltros, setMostrarFiltros] = useState(false);
+    const [timerBusqueda, setTimerBusqueda] = useState(null);
 
     useEffect(() => {
         if (activeTab === 'hoy') {
@@ -146,12 +165,16 @@ export default function BarberoDashboard() {
     }, [citasPendientes, citasConfirmadas, citasHoy]);
 
     const cargarCitasHoy = async () => {
+        setLoadingHoy(true);
         try {
             const hoy = new Date().toISOString().split('T')[0];
             const response = await citasAPI.getCitasBarbero(user.idUsuario, null, hoy);
             setCitasHoy(response.data.data);
         } catch (error) {
             console.error('Error al cargar citas:', error);
+            showToast('Error al cargar citas de hoy', 'error');
+        } finally {
+            setLoadingHoy(false);
         }
     };
 
@@ -192,9 +215,12 @@ export default function BarberoDashboard() {
 
     // Ajustar items por página según columnas y tamaño
     useEffect(() => {
-        let items = 12; // Default
-
-        // Ajustar según columnas
+        if (customItemsPerPage) {
+            setItemsPerPage(customItemsPerPage);
+            return;
+        }
+        
+        let items = 12;
         if (layoutColumns === 1) {
             items = layoutSize === 'compact' ? 15 : layoutSize === 'comfortable' ? 8 : 10;
         } else if (layoutColumns === 2) {
@@ -204,7 +230,44 @@ export default function BarberoDashboard() {
         }
 
         setItemsPerPage(items);
-    }, [layoutColumns, layoutSize]);
+    }, [layoutColumns, layoutSize, customItemsPerPage]);
+
+    // Persistir configuración de layout
+    useEffect(() => {
+        localStorage.setItem('barberoLayoutColumns', layoutColumns.toString());
+    }, [layoutColumns]);
+
+    useEffect(() => {
+        localStorage.setItem('barberoLayoutSize', layoutSize);
+    }, [layoutSize]);
+
+    useEffect(() => {
+        if (customItemsPerPage) {
+            localStorage.setItem('barberoItemsPerPage', customItemsPerPage.toString());
+        }
+    }, [customItemsPerPage]);
+
+    // Persistir filtros
+    useEffect(() => {
+        localStorage.setItem('barberoFiltros', JSON.stringify(filtros));
+    }, [filtros]);
+
+    // Búsqueda con debounce en historial
+    useEffect(() => {
+        if (activeTab === 'historial') {
+            if (timerBusqueda) {
+                clearTimeout(timerBusqueda);
+            }
+            
+            const timer = setTimeout(() => {
+                cargarTodasCitas();
+            }, 500);
+            
+            setTimerBusqueda(timer);
+            
+            return () => clearTimeout(timer);
+        }
+    }, [filtros, activeTab]);
 
     // Función de paginación genérica
     const paginate = (items, currentPage) => {
@@ -249,26 +312,35 @@ export default function BarberoDashboard() {
     const getTotalPages = (totalItems) => Math.ceil(totalItems / itemsPerPage) || 1;
 
     const cargarCitasPendientes = async () => {
+        setLoadingPendientes(true);
         try {
             const response = await citasAPI.getCitasBarbero(user.idUsuario);
             const pendientes = response.data.data.filter(c => c.estado === 'pendiente');
             setCitasPendientes(pendientes);
         } catch (error) {
             console.error('Error al cargar citas pendientes:', error);
+            showToast('Error al cargar citas pendientes', 'error');
+        } finally {
+            setLoadingPendientes(false);
         }
     };
 
     const cargarCitasConfirmadas = async () => {
+        setLoadingConfirmadas(true);
         try {
             const response = await citasAPI.getCitasBarbero(user.idUsuario);
             const confirmadas = response.data.data.filter(c => c.estado === 'confirmada');
             setCitasConfirmadas(confirmadas);
         } catch (error) {
             console.error('Error al cargar citas confirmadas:', error);
+            showToast('Error al cargar citas confirmadas', 'error');
+        } finally {
+            setLoadingConfirmadas(false);
         }
     };
 
     const cargarTodasCitas = async () => {
+        setLoadingHistorial(true);
         try {
             const response = await citasAPI.getCitasBarbero(user.idUsuario);
             let citas = response.data.data;
@@ -291,9 +363,19 @@ export default function BarberoDashboard() {
                 );
             }
 
+            // Ordenar por fecha
+            citas.sort((a, b) => {
+                const fechaA = new Date(a.fecha + 'T' + (a.horaIn || '00:00:00'));
+                const fechaB = new Date(b.fecha + 'T' + (b.horaIn || '00:00:00'));
+                return filtros.ordenFecha === 'desc' ? fechaB - fechaA : fechaA - fechaB;
+            });
+
             setTodasCitas(citas);
         } catch (error) {
             console.error('Error al cargar historial:', error);
+            showToast('Error al cargar historial', 'error');
+        } finally {
+            setLoadingHistorial(false);
         }
     };
 
@@ -331,8 +413,33 @@ export default function BarberoDashboard() {
                 try {
                     await citasAPI.confirmarCita(idCita);
                     showToast('Cita confirmada exitosamente', 'success');
-                    // Recargar pendientes
-                    cargarCitasPendientes();
+                    
+                    // Actualizar el estado local inmediatamente
+                    // Mover la cita de pendientes a confirmadas
+                    const citaConfirmada = citasPendientes.find(c => c.idCita === idCita);
+                    if (citaConfirmada) {
+                        // Actualizar estado de la cita
+                        const citaActualizada = { ...citaConfirmada, estado: 'confirmada' };
+                        
+                        // Remover de pendientes
+                        setCitasPendientes(prev => prev.filter(c => c.idCita !== idCita));
+                        
+                        // Agregar a confirmadas
+                        setCitasConfirmadas(prev => [citaActualizada, ...prev]);
+                        
+                        // Actualizar en citasHoy si existe
+                        setCitasHoy(prev => prev.map(c => 
+                            c.idCita === idCita ? citaActualizada : c
+                        ));
+                        
+                        // Actualizar estadísticas
+                        if (estadisticas) {
+                            setEstadisticas(prev => ({
+                                ...prev,
+                                pendientes: prev.pendientes - 1
+                            }));
+                        }
+                    }
                 } catch (error) {
                     console.error('Error al confirmar cita:', error);
                     showToast(error.response?.data?.message || 'Error al confirmar cita', 'error');
@@ -353,11 +460,26 @@ export default function BarberoDashboard() {
                 try {
                     await citasAPI.rechazarCita(idCita);
                     showToast('Cita rechazada', 'success');
-                    // Recargar la vista activa
+                    
+                    // Actualizar el estado local inmediatamente
+                    // Remover de pendientes o confirmadas según corresponda
                     if (vistaGestion === 'left') {
-                        cargarCitasPendientes();
+                        setCitasPendientes(prev => prev.filter(c => c.idCita !== idCita));
                     } else {
-                        cargarCitasConfirmadas();
+                        setCitasConfirmadas(prev => prev.filter(c => c.idCita !== idCita));
+                    }
+                    
+                    // Remover de citasHoy si existe
+                    setCitasHoy(prev => prev.filter(c => c.idCita !== idCita));
+                    
+                    // Actualizar estadísticas
+                    if (estadisticas) {
+                        setEstadisticas(prev => ({
+                            ...prev,
+                            canceladas: prev.canceladas + 1,
+                            [vistaGestion === 'left' ? 'pendientes' : 'confirmadas']: 
+                                prev[vistaGestion === 'left' ? 'pendientes' : 'confirmadas'] - 1
+                        }));
                     }
                 } catch (error) {
                     console.error('Error al rechazar cita:', error);
@@ -379,7 +501,30 @@ export default function BarberoDashboard() {
                 try {
                     await citasAPI.completarCita(idCita);
                     showToast('Cita completada exitosamente', 'success');
-                    cargarCitasConfirmadas();
+                    
+                    // Actualizar el estado local inmediatamente
+                    const citaCompletada = citasConfirmadas.find(c => c.idCita === idCita);
+                    if (citaCompletada) {
+                        // Actualizar estado de la cita
+                        const citaActualizada = { ...citaCompletada, estado: 'completada' };
+                        
+                        // Remover de confirmadas
+                        setCitasConfirmadas(prev => prev.filter(c => c.idCita !== idCita));
+                        
+                        // Actualizar en citasHoy si existe
+                        setCitasHoy(prev => prev.map(c => 
+                            c.idCita === idCita ? citaActualizada : c
+                        ));
+                        
+                        // Actualizar estadísticas
+                        if (estadisticas) {
+                            setEstadisticas(prev => ({
+                                ...prev,
+                                completadas: prev.completadas + 1,
+                                confirmadas: prev.confirmadas - 1
+                            }));
+                        }
+                    }
                 } catch (error) {
                     console.error('Error al completar cita:', error);
                     showToast(error.response?.data?.message || 'Error al completar cita', 'error');
@@ -492,12 +637,15 @@ export default function BarberoDashboard() {
             fechaInicio: '',
             fechaFin: '',
             estado: '',
-            busqueda: ''
+            busqueda: '',
+            ordenFecha: 'desc'
         });
     };
 
     const contarFiltrosActivos = () => {
-        return Object.values(filtros).filter(v => v !== '').length;
+        // No contar ordenFecha como filtro activo
+        const { ordenFecha, ...filtrosParaContar } = filtros;
+        return Object.values(filtrosParaContar).filter(v => v !== '').length;
     };
 
     // Calcular estadísticas del historial filtrado
@@ -620,6 +768,17 @@ export default function BarberoDashboard() {
                     {/* CITAS DE HOY */}
                     {activeTab === 'hoy' && (
                         <div className="space-y-4 animate-fadeIn">
+                            {/* LayoutControl */}
+                            <LayoutControl
+                                columns={layoutColumns}
+                                onColumnsChange={setLayoutColumns}
+                                size={layoutSize}
+                                onSizeChange={setLayoutSize}
+                                itemsPerPage={customItemsPerPage || itemsPerPage}
+                                onItemsPerPageChange={setCustomItemsPerPage}
+                                totalItems={getCitasHoyFiltradas().length}
+                            />
+
                             {/* Header */}
                             <div className="card">
                                 <div className="flex items-center justify-between mb-4">
@@ -727,17 +886,13 @@ export default function BarberoDashboard() {
                                 </div>
                             </div>
 
-                            {/* Control de Layout */}
-                            <LayoutControl
-                                columns={layoutColumns}
-                                onColumnsChange={setLayoutColumns}
-                                size={layoutSize}
-                                onSizeChange={setLayoutSize}
-                            />
-
                             {/* Lista de Citas */}
                             <div className="card">
-                                {getCitasHoyFiltradas().length === 0 ? (
+                                {loadingHoy ? (
+                                    <div className={`grid ${getGridClass()} gap-3`}>
+                                        <CitaCardSkeleton size={layoutSize} count={itemsPerPage} />
+                                    </div>
+                                ) : getCitasHoyFiltradas().length === 0 ? (
                                     <div className="text-center py-12">
                                         <FaCalendarDay className="w-16 h-16 text-gray-300 mx-auto mb-4"/>
                                         <p className="text-gray-500 text-lg">
@@ -764,14 +919,16 @@ export default function BarberoDashboard() {
                                             ))}
                                         </div>
 
-                                        {/* Paginación */}
-                                        <Pagination
-                                            currentPage={currentPageHoy}
-                                            totalPages={getTotalPages(getCitasHoyFiltradas().length)}
-                                            onPageChange={setCurrentPageHoy}
-                                            itemsPerPage={itemsPerPage}
-                                            totalItems={getCitasHoyFiltradas().length}
-                                        />
+                                        {/* Paginación Condicional */}
+                                        {getCitasHoyFiltradas().length > itemsPerPage && (
+                                            <Pagination
+                                                currentPage={currentPageHoy}
+                                                totalPages={getTotalPages(getCitasHoyFiltradas().length)}
+                                                onPageChange={setCurrentPageHoy}
+                                                itemsPerPage={itemsPerPage}
+                                                totalItems={getCitasHoyFiltradas().length}
+                                            />
+                                        )}
                                     </>
                                 )}
                             </div>
@@ -800,6 +957,17 @@ export default function BarberoDashboard() {
                             {/* Vista: Pendientes por confirmar */}
                             {vistaGestion === 'left' && (
                                 <div className="space-y-4 animate-slideInLeft">
+                                    {/* Control de Layout */}
+                                    <LayoutControl
+                                        columns={layoutColumns}
+                                        onColumnsChange={setLayoutColumns}
+                                        size={layoutSize}
+                                        onSizeChange={setLayoutSize}
+                                        itemsPerPage={customItemsPerPage || itemsPerPage}
+                                        onItemsPerPageChange={setCustomItemsPerPage}
+                                        totalItems={citasPendientes.length}
+                                    />
+
                                     {/* Panel de Filtros Contraíble - Versión Compacta */}
                                     <div className="bg-yellow-50 border border-yellow-300 rounded-lg shadow-sm">
                                         <button
@@ -908,13 +1076,6 @@ export default function BarberoDashboard() {
                                     </div>
 
                                     {/* Lista de pendientes por confirmar */}
-                                    <LayoutControl
-                                        columns={layoutColumns}
-                                        onColumnsChange={setLayoutColumns}
-                                        size={layoutSize}
-                                        onSizeChange={setLayoutSize}
-                                    />
-
                                     <div className="card">
                                         <div className="flex items-center justify-between mb-4">
                                             <div className="flex items-center space-x-3">
@@ -923,7 +1084,11 @@ export default function BarberoDashboard() {
                                             </div>
                                             <span className="badge badge-warning text-base px-3 py-1.5">{filtrarYOrdenarPendientes().length}</span>
                                         </div>
-                                        {filtrarYOrdenarPendientes().length === 0 ? (
+                                        {loadingPendientes ? (
+                                            <div className={`grid ${getGridClass()} gap-3`}>
+                                                <CitaCardSkeleton size={layoutSize} count={itemsPerPage} />
+                                            </div>
+                                        ) : filtrarYOrdenarPendientes().length === 0 ? (
                                             <div className="text-center py-12">
                                                 <FaClipboardList className="w-16 h-16 text-gray-300 mx-auto mb-4"/>
                                                 <p className="text-gray-500 text-lg">
@@ -950,14 +1115,16 @@ export default function BarberoDashboard() {
                                                     ))}
                                                 </div>
 
-                                                {/* Paginación */}
-                                                <Pagination
-                                                    currentPage={currentPagePendientes}
-                                                    totalPages={getTotalPages(filtrarYOrdenarPendientes().length)}
-                                                    onPageChange={setCurrentPagePendientes}
-                                                    itemsPerPage={itemsPerPage}
-                                                    totalItems={filtrarYOrdenarPendientes().length}
-                                                />
+                                                {/* Paginación Condicional */}
+                                                {filtrarYOrdenarPendientes().length > itemsPerPage && (
+                                                    <Pagination
+                                                        currentPage={currentPagePendientes}
+                                                        totalPages={getTotalPages(filtrarYOrdenarPendientes().length)}
+                                                        onPageChange={setCurrentPagePendientes}
+                                                        itemsPerPage={itemsPerPage}
+                                                        totalItems={filtrarYOrdenarPendientes().length}
+                                                    />
+                                                )}
                                             </>
                                         )}
                                     </div>
@@ -967,6 +1134,17 @@ export default function BarberoDashboard() {
                             {/* Vista: Pendientes por completar */}
                             {vistaGestion === 'right' && (
                                 <div className="space-y-4 animate-slideInRight">
+                                    {/* Control de Layout */}
+                                    <LayoutControl
+                                        columns={layoutColumns}
+                                        onColumnsChange={setLayoutColumns}
+                                        size={layoutSize}
+                                        onSizeChange={setLayoutSize}
+                                        itemsPerPage={customItemsPerPage || itemsPerPage}
+                                        onItemsPerPageChange={setCustomItemsPerPage}
+                                        totalItems={citasConfirmadas.length}
+                                    />
+
                                     {/* Panel de Filtros Contraíble - Versión Compacta */}
                                     <div className="bg-blue-50 border border-blue-300 rounded-lg shadow-sm">
                                         <button
@@ -1075,13 +1253,6 @@ export default function BarberoDashboard() {
                                     </div>
 
                                     {/* Lista de pendientes por completar */}
-                                    <LayoutControl
-                                        columns={layoutColumns}
-                                        onColumnsChange={setLayoutColumns}
-                                        size={layoutSize}
-                                        onSizeChange={setLayoutSize}
-                                    />
-
                                     <div className="card">
                                         <div className="flex items-center justify-between mb-4">
                                             <div className="flex items-center space-x-3">
@@ -1090,7 +1261,11 @@ export default function BarberoDashboard() {
                                             </div>
                                             <span className="badge badge-info text-base px-3 py-1.5">{filtrarYOrdenarConfirmadas().length}</span>
                                         </div>
-                                        {filtrarYOrdenarConfirmadas().length === 0 ? (
+                                        {loadingConfirmadas ? (
+                                            <div className={`grid ${getGridClass()} gap-3`}>
+                                                <CitaCardSkeleton size={layoutSize} count={itemsPerPage} />
+                                            </div>
+                                        ) : filtrarYOrdenarConfirmadas().length === 0 ? (
                                             <div className="text-center py-12">
                                                 <FaCheckCircle className="w-16 h-16 text-gray-300 mx-auto mb-4"/>
                                                 <p className="text-gray-500 text-lg">
@@ -1117,14 +1292,16 @@ export default function BarberoDashboard() {
                                                     ))}
                                                 </div>
 
-                                                {/* Paginación */}
-                                                <Pagination
-                                                    currentPage={currentPageConfirmadas}
-                                                    totalPages={getTotalPages(filtrarYOrdenarConfirmadas().length)}
-                                                    onPageChange={setCurrentPageConfirmadas}
-                                                    itemsPerPage={itemsPerPage}
-                                                    totalItems={filtrarYOrdenarConfirmadas().length}
-                                                />
+                                                {/* Paginación Condicional */}
+                                                {filtrarYOrdenarConfirmadas().length > itemsPerPage && (
+                                                    <Pagination
+                                                        currentPage={currentPageConfirmadas}
+                                                        totalPages={getTotalPages(filtrarYOrdenarConfirmadas().length)}
+                                                        onPageChange={setCurrentPageConfirmadas}
+                                                        itemsPerPage={itemsPerPage}
+                                                        totalItems={filtrarYOrdenarConfirmadas().length}
+                                                    />
+                                                )}
                                             </>
                                         )}
                                     </div>
@@ -1136,6 +1313,17 @@ export default function BarberoDashboard() {
                     {/* HISTORIAL */}
                     {activeTab === 'historial' && (
                         <div className="space-y-6 animate-fadeIn">
+                            {/* Control de Layout */}
+                            <LayoutControl
+                                columns={layoutColumns}
+                                onColumnsChange={setLayoutColumns}
+                                size={layoutSize}
+                                onSizeChange={setLayoutSize}
+                                itemsPerPage={customItemsPerPage || itemsPerPage}
+                                onItemsPerPageChange={setCustomItemsPerPage}
+                                totalItems={getCitasHistorialFiltradas().length}
+                            />
+
                             {/* Barra de búsqueda y filtros */}
                             <div className="card">
                                 <div className="flex flex-col md:flex-row gap-4">
@@ -1198,7 +1386,7 @@ export default function BarberoDashboard() {
                                         </button>
                                     </div>
 
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                                         <div>
                                             <label className="block text-sm font-semibold text-gray-700 mb-2">
                                                 Estado
@@ -1238,6 +1426,21 @@ export default function BarberoDashboard() {
                                                 onChange={(e) => setFiltros({...filtros, fechaFin: e.target.value})}
                                                 className="input-field"
                                             />
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                                <FaClock className="inline mr-1" />
+                                                Ordenar por Fecha
+                                            </label>
+                                            <select
+                                                value={filtros.ordenFecha}
+                                                onChange={(e) => setFiltros({...filtros, ordenFecha: e.target.value})}
+                                                className="input-field"
+                                            >
+                                                <option value="desc">Más recientes primero</option>
+                                                <option value="asc">Más antiguos primero</option>
+                                            </select>
                                         </div>
                                     </div>
 
@@ -1279,48 +1482,61 @@ export default function BarberoDashboard() {
                                     </h2>
                                 </div>
 
-                                {todasCitas.length === 0 ? (
+                                {loadingHistorial ? (
+                                    <div className="text-center py-12">
+                                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+                                        <p className="text-gray-500">Cargando historial...</p>
+                                    </div>
+                                ) : todasCitas.length === 0 ? (
                                     <div className="text-center py-12">
                                         <FaCalendarAlt className="w-16 h-16 text-gray-300 mx-auto mb-4"/>
                                         <p className="text-gray-500 text-lg">No hay citas en el historial</p>
                                     </div>
                                 ) : (
                                     <div className="overflow-x-auto custom-scrollbar">
-                                        <table className="table-retro">
+                                        <table className="table-retro table-optimized">
                                             <thead>
                                             <tr>
-                                                <th>Fecha</th>
-                                                <th>Hora</th>
-                                                <th>Cliente</th>
-                                                <th>Servicios</th>
-                                                <th className="text-right">Total</th>
-                                                <th className="text-right">Tu Comisión</th>
-                                                <th className="text-center">Estado</th>
+                                                <th className="table-cell-md">Fecha</th>
+                                                <th className="table-cell-sm">Hora</th>
+                                                <th className="table-cell-lg">Cliente</th>
+                                                <th className="table-cell-xl">Servicios</th>
+                                                <th className="text-right table-cell-md">Total</th>
+                                                <th className="text-right table-cell-md">Tu Comisión</th>
+                                                <th className="text-center table-cell-md">Estado</th>
                                             </tr>
                                             </thead>
                                             <tbody>
                                             {todasCitas.map(cita => (
                                                 <tr key={cita.idCita}>
-                                                    <td className="font-semibold whitespace-nowrap">
-                                                        {new Date(cita.fecha).toLocaleDateString('es-CO', {
-                                                            day: '2-digit',
-                                                            month: 'short',
-                                                            year: 'numeric'
-                                                        })}
+                                                    <td className="font-semibold table-cell-md">
+                                                        <span className="table-cell-content">
+                                                            {new Date(cita.fecha).toLocaleDateString('es-CO', {
+                                                                day: '2-digit',
+                                                                month: 'short',
+                                                                year: 'numeric'
+                                                            })}
+                                                        </span>
                                                     </td>
-                                                    <td className="font-mono">{cita.horaIn?.substring(0, 5)}</td>
-                                                    <td>{cita.nombreCliente}</td>
-                                                    <td className="text-sm text-gray-600">{cita.servicios}</td>
-                                                    <td className="text-right font-bold text-primary whitespace-nowrap">
+                                                    <td className="font-mono table-cell-sm">
+                                                        {cita.horaIn?.substring(0, 5)}
+                                                    </td>
+                                                    <td className="table-cell-lg table-cell-tooltip" data-tooltip={cita.nombreCliente}>
+                                                        <span className="table-cell-content">{cita.nombreCliente}</span>
+                                                    </td>
+                                                    <td className="table-cell-xl table-cell-tooltip" data-tooltip={cita.servicios}>
+                                                        <span className="text-sm text-gray-600 table-cell-content">{cita.servicios}</span>
+                                                    </td>
+                                                    <td className="text-right font-bold text-primary table-cell-md">
                                                         ${cita.total?.toLocaleString()}
                                                     </td>
-                                                    <td className="text-right font-semibold text-green-600 whitespace-nowrap">
+                                                    <td className="text-right font-semibold text-green-600 table-cell-md">
                                                         {cita.estado === 'completada'
                                                             ? `$${((cita.total * (user.comision || 0) / 100) || 0).toLocaleString()}`
                                                             : '-'
                                                         }
                                                     </td>
-                                                    <td className="text-center">
+                                                    <td className="text-center table-cell-md">
                                                         <span className={`badge whitespace-nowrap ${
                                                             cita.estado === 'completada' ? 'badge-success' :
                                                                 cita.estado === 'confirmada' ? 'badge-info' :

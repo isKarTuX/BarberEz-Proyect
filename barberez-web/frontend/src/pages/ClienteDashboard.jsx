@@ -4,7 +4,7 @@ import { citasAPI, barberosAPI, serviciosAPI } from '../services/api';
 import {
     FaCut, FaSignOutAlt, FaCalendarPlus, FaCalendarCheck, FaHistory,
     FaUserTie, FaClock, FaMoneyBillWave, FaFilter, FaTimes, FaSearch,
-    FaCheckCircle, FaTimesCircle, FaHourglassHalf, FaTrash, FaInfoCircle
+    FaCheckCircle, FaInfoCircle
 } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
 import SelectBusqueda from '../components/SelectBusqueda';
@@ -12,6 +12,7 @@ import Toast from '../components/Toast';
 import ConfirmModal from '../components/ConfirmModal';
 import LayoutControl from '../components/LayoutControl';
 import CitaCard from '../components/CitaCard';
+import CitaCardSkeleton from '../components/CitaCardSkeleton';
 import Pagination from '../components/Pagination';
 
 export default function ClienteDashboard() {
@@ -34,13 +35,23 @@ export default function ClienteDashboard() {
     const [citasPendientes, setCitasPendientes] = useState([]);
     const [historialCitas, setHistorialCitas] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [loadingHistorial, setLoadingHistorial] = useState(false);
 
     // Layout y paginación
-    const [layoutColumns, setLayoutColumns] = useState(2);
-    const [layoutSize, setLayoutSize] = useState('normal');
+    const [layoutColumns, setLayoutColumns] = useState(() => {
+        const saved = localStorage.getItem('clienteLayoutColumns');
+        return saved ? parseInt(saved) : 2;
+    });
+    const [layoutSize, setLayoutSize] = useState(() => {
+        return localStorage.getItem('clienteLayoutSize') || 'normal';
+    });
     const [currentPagePendientes, setCurrentPagePendientes] = useState(1);
     const [currentPageHistorial, setCurrentPageHistorial] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(12);
+    const [customItemsPerPage, setCustomItemsPerPage] = useState(() => {
+        const saved = localStorage.getItem('clienteItemsPerPage');
+        return saved ? parseInt(saved) : null;
+    });
 
     // Toast notifications
     const [toast, setToast] = useState(null);
@@ -79,17 +90,27 @@ export default function ClienteDashboard() {
     };
 
     // Filtros para historial
-    const [filtros, setFiltros] = useState({
-        fechaInicio: '',
-        fechaFin: '',
-        estado: '',
-        idBarbero: '',
-        busqueda: ''
+    const [filtros, setFiltros] = useState(() => {
+        const saved = localStorage.getItem('clienteFiltros');
+        return saved ? JSON.parse(saved) : {
+            fechaInicio: '',
+            fechaFin: '',
+            estado: '',
+            idBarbero: '',
+            busqueda: '',
+            ordenFecha: 'desc' // desc = más recientes primero, asc = más antiguos primero
+        };
     });
     const [mostrarFiltros, setMostrarFiltros] = useState(false);
+    const [timerBusqueda, setTimerBusqueda] = useState(null);
 
     // Ajustar items por página según layout
     useEffect(() => {
+        if (customItemsPerPage) {
+            setItemsPerPage(customItemsPerPage);
+            return;
+        }
+        
         let items = 12;
         if (layoutColumns === 1) {
             items = layoutSize === 'compact' ? 15 : layoutSize === 'comfortable' ? 8 : 10;
@@ -99,7 +120,44 @@ export default function ClienteDashboard() {
             items = layoutSize === 'compact' ? 30 : layoutSize === 'comfortable' ? 18 : 24;
         }
         setItemsPerPage(items);
-    }, [layoutColumns, layoutSize]);
+    }, [layoutColumns, layoutSize, customItemsPerPage]);
+
+    // Persistir configuración de layout
+    useEffect(() => {
+        localStorage.setItem('clienteLayoutColumns', layoutColumns.toString());
+    }, [layoutColumns]);
+
+    useEffect(() => {
+        localStorage.setItem('clienteLayoutSize', layoutSize);
+    }, [layoutSize]);
+
+    useEffect(() => {
+        if (customItemsPerPage) {
+            localStorage.setItem('clienteItemsPerPage', customItemsPerPage.toString());
+        }
+    }, [customItemsPerPage]);
+
+    // Persistir filtros
+    useEffect(() => {
+        localStorage.setItem('clienteFiltros', JSON.stringify(filtros));
+    }, [filtros]);
+
+    // Búsqueda con debounce
+    useEffect(() => {
+        if (activeTab === 'historial') {
+            if (timerBusqueda) {
+                clearTimeout(timerBusqueda);
+            }
+            
+            const timer = setTimeout(() => {
+                cargarHistorial();
+            }, 500);
+            
+            setTimerBusqueda(timer);
+            
+            return () => clearTimeout(timer);
+        }
+    }, [filtros, activeTab]);
 
     // Funciones de paginación
     const paginate = (items, currentPage) => {
@@ -157,11 +215,29 @@ export default function ClienteDashboard() {
         cargarBarberos();
         cargarServicios();
         if (activeTab === 'citas') {
+            setCurrentPagePendientes(1);
             cargarCitasPendientes();
         } else if (activeTab === 'historial') {
+            setCurrentPageHistorial(1);
             cargarHistorial();
         }
     }, [activeTab]);
+
+    // Reset página cuando cambian los filtros
+    useEffect(() => {
+        setCurrentPageHistorial(1);
+    }, [filtros]);
+
+    // Limpiar la hora seleccionada cuando cambia la fecha
+    useEffect(() => {
+        if (formCita.fecha && formCita.horaIn) {
+            // Verificar si la hora seleccionada sigue siendo válida
+            const horariosDisponibles = getHorariosDisponibles();
+            if (!horariosDisponibles.includes(formCita.horaIn)) {
+                setFormCita(prev => ({ ...prev, horaIn: '' }));
+            }
+        }
+    }, [formCita.fecha]);
 
     const cargarBarberos = async () => {
         try {
@@ -182,18 +258,35 @@ export default function ClienteDashboard() {
     };
 
     const cargarCitasPendientes = async () => {
+        setLoading(true);
         try {
             const response = await citasAPI.getCitasCliente(user.idUsuario, 'pendiente');
             setCitasPendientes(response.data.data);
         } catch (error) {
             console.error('Error al cargar citas:', error);
+            showToast('Error al cargar las citas pendientes', 'error');
+        } finally {
+            setLoading(false);
         }
     };
 
     const cargarHistorial = async () => {
+        setLoadingHistorial(true);
         try {
             const response = await citasAPI.getCitasCliente(user.idUsuario);
-            let citas = response.data.data.filter(c => c.estado !== 'pendiente');
+            // Solo mostrar citas completadas o canceladas en el historial
+            // Las confirmadas solo si la fecha ya pasó
+            let citas = response.data.data.filter(c => {
+                if (c.estado === 'completada' || c.estado === 'cancelada') {
+                    return true;
+                }
+                // Si es confirmada, verificar que la fecha ya pasó
+                if (c.estado === 'confirmada') {
+                    const fechaCita = new Date(c.fecha + 'T' + c.horaIn);
+                    return fechaCita < new Date();
+                }
+                return false;
+            });
 
             // Aplicar filtros
             if (filtros.fechaInicio) {
@@ -216,9 +309,19 @@ export default function ClienteDashboard() {
                 );
             }
 
+            // Ordenar por fecha
+            citas.sort((a, b) => {
+                const fechaA = new Date(a.fecha + 'T' + (a.horaIn || '00:00:00'));
+                const fechaB = new Date(b.fecha + 'T' + (b.horaIn || '00:00:00'));
+                return filtros.ordenFecha === 'desc' ? fechaB - fechaA : fechaA - fechaB;
+            });
+
             setHistorialCitas(citas);
         } catch (error) {
             console.error('Error al cargar historial:', error);
+            showToast('Error al cargar el historial', 'error');
+        } finally {
+            setLoadingHistorial(false);
         }
     };
 
@@ -251,6 +354,23 @@ export default function ClienteDashboard() {
         if (formCita.servicios.length === 0) {
             showToast('Selecciona al menos un servicio', 'warning');
             return;
+        }
+
+        // Validar que la hora no sea en el pasado si es el día de hoy
+        const fechaSeleccionada = new Date(formCita.fecha + 'T00:00:00');
+        const hoy = new Date();
+        hoy.setHours(0, 0, 0, 0);
+
+        if (fechaSeleccionada.getTime() === hoy.getTime()) {
+            const [horas, minutos] = formCita.horaIn.split(':').map(Number);
+            const horarioCitaMinutos = horas * 60 + minutos;
+            const horaActual = new Date();
+            const horaActualMinutos = horaActual.getHours() * 60 + horaActual.getMinutes();
+
+            if (horarioCitaMinutos <= horaActualMinutos + 30) {
+                showToast('No puedes agendar una cita en una hora que ya pasó o está muy próxima. Selecciona una hora con al menos 30 minutos de anticipación.', 'error');
+                return;
+            }
         }
 
         setLoading(true);
@@ -288,7 +408,14 @@ export default function ClienteDashboard() {
                 try {
                     await citasAPI.cancelarCita(idCita, user.idUsuario, 'cliente');
                     showToast('Cita cancelada exitosamente', 'success');
-                    cargarCitasPendientes();
+                    
+                    // Actualizar el estado local inmediatamente
+                    setCitasPendientes(prev => prev.filter(c => c.idCita !== idCita));
+                    
+                    // También actualizar el historial si la cita está allí
+                    setHistorialCitas(prev => prev.map(c => 
+                        c.idCita === idCita ? { ...c, estado: 'cancelada' } : c
+                    ));
                 } catch (error) {
                     showToast(error.response?.data?.message || 'Error al cancelar cita', 'error');
                 }
@@ -308,12 +435,16 @@ export default function ClienteDashboard() {
             fechaFin: '',
             estado: '',
             idBarbero: '',
-            busqueda: ''
+            busqueda: '',
+            ordenFecha: 'desc'
         });
+        setCurrentPageHistorial(1);
     };
 
     const contarFiltrosActivos = () => {
-        return Object.values(filtros).filter(v => v !== '').length;
+        // No contar ordenFecha como filtro activo
+        const { ordenFecha, ...filtrosParaContar } = filtros;
+        return Object.values(filtrosParaContar).filter(v => v !== '').length;
     };
 
     // Generar horarios disponibles
@@ -322,6 +453,33 @@ export default function ClienteDashboard() {
         horarios.push(`${i.toString().padStart(2, '0')}:00:00`);
         if (i < 18) horarios.push(`${i.toString().padStart(2, '0')}:30:00`);
     }
+
+    // Filtrar horarios según la fecha seleccionada
+    const getHorariosDisponibles = () => {
+        if (!formCita.fecha) {
+            return []; // No mostrar horarios hasta que se seleccione una fecha
+        }
+
+        const fechaSeleccionada = new Date(formCita.fecha + 'T00:00:00');
+        const hoy = new Date();
+        hoy.setHours(0, 0, 0, 0);
+
+        // Si la fecha seleccionada no es hoy, mostrar todos los horarios
+        if (fechaSeleccionada.getTime() !== hoy.getTime()) {
+            return horarios;
+        }
+
+        // Si es hoy, filtrar horarios pasados
+        const horaActual = new Date();
+        const horaActualMinutos = horaActual.getHours() * 60 + horaActual.getMinutes();
+
+        return horarios.filter(hora => {
+            const [horas, minutos] = hora.split(':').map(Number);
+            const horarioMinutos = horas * 60 + minutos;
+            // Agregar un margen de 30 minutos para preparación
+            return horarioMinutos > horaActualMinutos + 30;
+        });
+    };
 
     const barberosOptions = barberos.map(b => ({
         value: b.idBarbero,
@@ -334,7 +492,7 @@ export default function ClienteDashboard() {
         const canceladas = historialCitas.filter(c => c.estado === 'cancelada').length;
         const totalGastado = historialCitas
             .filter(c => c.estado === 'completada')
-            .reduce((sum, c) => sum + (c.total || 0), 0);
+            .reduce((sum, c) => sum + (parseFloat(c.total) || 0), 0);
 
         return { completadas, canceladas, totalGastado };
     };
@@ -462,14 +620,33 @@ export default function ClienteDashboard() {
                                         onChange={(e) => setFormCita({ ...formCita, horaIn: e.target.value })}
                                         className="input-field"
                                         required
+                                        disabled={!formCita.fecha}
                                     >
-                                        <option value="">Seleccionar hora</option>
-                                        {horarios.map(hora => (
+                                        <option value="">
+                                            {!formCita.fecha 
+                                                ? 'Primero selecciona una fecha' 
+                                                : getHorariosDisponibles().length === 0
+                                                    ? 'No hay horarios disponibles para hoy'
+                                                    : 'Seleccionar hora'
+                                            }
+                                        </option>
+                                        {getHorariosDisponibles().map(hora => (
                                             <option key={hora} value={hora}>
                                                 {hora.substring(0, 5)}
                                             </option>
                                         ))}
                                     </select>
+                                    {!formCita.fecha && (
+                                        <p className="text-xs text-gray-500 mt-1">
+                                            * Selecciona primero una fecha para ver las horas disponibles
+                                        </p>
+                                    )}
+                                    {formCita.fecha && getHorariosDisponibles().length === 0 && (
+                                        <p className="text-xs text-amber-600 mt-1 flex items-center">
+                                            <FaClock className="inline w-3 h-3 mr-1" />
+                                            No hay horarios disponibles. Por favor selecciona otro día.
+                                        </p>
+                                    )}
                                 </div>
 
                                 {/* Barbero con búsqueda */}
@@ -603,6 +780,9 @@ export default function ClienteDashboard() {
                             onColumnsChange={setLayoutColumns}
                             size={layoutSize}
                             onSizeChange={setLayoutSize}
+                            itemsPerPage={customItemsPerPage || itemsPerPage}
+                            onItemsPerPageChange={setCustomItemsPerPage}
+                            totalItems={citasPendientes.length}
                         />
 
                         <div className="card">
@@ -611,7 +791,12 @@ export default function ClienteDashboard() {
                                 <h2 className="text-2xl font-bold text-gray-800">Mis Citas Pendientes</h2>
                                 <span className="badge badge-warning text-base">{citasPendientes.length}</span>
                             </div>
-                            {citasPendientes.length === 0 ? (
+                            
+                            {loading ? (
+                                <div className={`grid ${getGridClass()} gap-3`}>
+                                    <CitaCardSkeleton size={layoutSize} count={itemsPerPage} />
+                                </div>
+                            ) : citasPendientes.length === 0 ? (
                                 <div className="text-center py-12">
                                     <FaCalendarCheck className="w-16 h-16 text-gray-300 mx-auto mb-4" />
                                     <p className="text-gray-500 text-lg mb-4">No tienes citas pendientes</p>
@@ -638,15 +823,17 @@ export default function ClienteDashboard() {
                                         ))}
                                     </div>
 
-                                    {/* Paginación */}
+                                    {/* Paginación - Siempre visible para citas pendientes */}
                                     {citasPendientes.length > itemsPerPage && (
-                                        <Pagination
-                                            currentPage={currentPagePendientes}
-                                            totalPages={getTotalPages(citasPendientes.length)}
-                                            onPageChange={setCurrentPagePendientes}
-                                            itemsPerPage={itemsPerPage}
-                                            totalItems={citasPendientes.length}
-                                        />
+                                        <div className="mt-6">
+                                            <Pagination
+                                                currentPage={currentPagePendientes}
+                                                totalPages={getTotalPages(citasPendientes.length)}
+                                                onPageChange={setCurrentPagePendientes}
+                                                itemsPerPage={itemsPerPage}
+                                                totalItems={citasPendientes.length}
+                                            />
+                                        </div>
                                     )}
                                 </>
                             )}
@@ -657,6 +844,17 @@ export default function ClienteDashboard() {
                 {/* HISTORIAL */}
                 {activeTab === 'historial' && (
                     <div className="space-y-6 animate-fadeIn">
+                        {/* LayoutControl */}
+                        <LayoutControl
+                            columns={layoutColumns}
+                            onColumnsChange={setLayoutColumns}
+                            size={layoutSize}
+                            onSizeChange={setLayoutSize}
+                            itemsPerPage={customItemsPerPage || itemsPerPage}
+                            onItemsPerPageChange={setCustomItemsPerPage}
+                            totalItems={getHistorialFiltrado().length}
+                        />
+
                         {/* Barra de búsqueda y filtros */}
                         <div className="card">
                             <div className="flex flex-col md:flex-row gap-4">
@@ -679,13 +877,6 @@ export default function ClienteDashboard() {
                                     )}
                                 </div>
                                 <button
-                                    onClick={cargarHistorial}
-                                    className="btn-primary flex items-center space-x-2 px-6"
-                                >
-                                    <FaSearch />
-                                    <span>Buscar</span>
-                                </button>
-                                <button
                                     onClick={() => setMostrarFiltros(!mostrarFiltros)}
                                     className="btn-secondary flex items-center space-x-2 px-6"
                                 >
@@ -698,6 +889,14 @@ export default function ClienteDashboard() {
                                     )}
                                 </button>
                             </div>
+
+                            {/* Indicador de búsqueda en progreso */}
+                            {loadingHistorial && (
+                                <div className="mt-3 flex items-center space-x-2 text-sm text-gray-600">
+                                    <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+                                    <span>Buscando...</span>
+                                </div>
+                            )}
                         </div>
 
                         {/* Panel de filtros */}
@@ -769,14 +968,26 @@ export default function ClienteDashboard() {
                                             className="input-field"
                                         />
                                     </div>
+
+                                    <div>
+                                        <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                            <FaClock className="inline mr-1" />
+                                            Ordenar por Fecha
+                                        </label>
+                                        <select
+                                            value={filtros.ordenFecha}
+                                            onChange={(e) => setFiltros({ ...filtros, ordenFecha: e.target.value })}
+                                            className="input-field"
+                                        >
+                                            <option value="desc">Más recientes primero</option>
+                                            <option value="asc">Más antiguos primero</option>
+                                        </select>
+                                    </div>
                                 </div>
 
                                 <div className="mt-4 flex justify-end space-x-3">
                                     <button onClick={limpiarFiltros} className="btn-outline">
                                         Limpiar
-                                    </button>
-                                    <button onClick={cargarHistorial} className="btn-primary">
-                                        Aplicar Filtros
                                     </button>
                                 </div>
                             </div>
@@ -805,61 +1016,54 @@ export default function ClienteDashboard() {
                             <div className="flex items-center justify-between mb-6">
                                 <h2 className="text-2xl font-bold text-gray-800 flex items-center space-x-2">
                                     <FaHistory className="text-primary" />
-                                    <span>Historial ({getHistorialFiltrado().length})</span>
+                                    <span>Historial</span>
                                 </h2>
+                                <span className="badge badge-info text-base">{getHistorialFiltrado().length} citas</span>
                             </div>
 
-                            {getHistorialFiltrado().length === 0 ? (
+                            {loadingHistorial ? (
+                                <div className={`grid ${getGridClass()} gap-3`}>
+                                    <CitaCardSkeleton size={layoutSize} count={itemsPerPage} />
+                                </div>
+                            ) : getHistorialFiltrado().length === 0 ? (
                                 <div className="text-center py-12">
                                     <FaHistory className="w-16 h-16 text-gray-300 mx-auto mb-4" />
                                     <p className="text-gray-500 text-lg">No hay citas en el historial</p>
+                                    {contarFiltrosActivos() > 0 && (
+                                        <button
+                                            onClick={limpiarFiltros}
+                                            className="mt-4 btn-outline"
+                                        >
+                                            <FaTimes className="inline mr-2" />
+                                            Limpiar Filtros
+                                        </button>
+                                    )}
                                 </div>
                             ) : (
                                 <>
-                                    <div className="space-y-4">
+                                    <div className={`grid ${getGridClass()} gap-3`}>
                                         {getHistorialPaginado().map(cita => (
-                                            <div key={cita.idCita} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
-                                                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                                                    <div className="flex-1">
-                                                        <div className="flex items-center space-x-2 mb-2">
-                                                            <span className={`badge whitespace-nowrap ${
-                                                                cita.estado === 'completada' ? 'badge-success' :
-                                                                cita.estado === 'confirmada' ? 'badge-info' :
-                                                                'badge-danger'
-                                                            }`}>
-                                                                {cita.estado === 'completada' && <FaCheckCircle className="inline w-3 h-3 mr-1" />}
-                                                                {cita.estado === 'cancelada' && <FaTimesCircle className="inline w-3 h-3 mr-1" />}
-                                                                {cita.estado}
-                                                            </span>
-                                                        </div>
-                                                        <p className="text-lg font-bold text-gray-800">
-                                                            {new Date(cita.fecha).toLocaleDateString('es-CO')} - {cita.horaIn?.substring(0, 5)}
-                                                        </p>
-                                                        <p className="text-gray-600">
-                                                            <FaUserTie className="inline text-primary mr-1" />
-                                                            {cita.nombreBarbero}
-                                                        </p>
-                                                        <p className="text-sm text-gray-600">{cita.servicios}</p>
-                                                    </div>
-                                                    <div className="text-right">
-                                                        <p className="text-2xl font-bold text-primary">
-                                                            ${cita.total?.toLocaleString()}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                            </div>
+                                            <CitaCard
+                                                key={cita.idCita}
+                                                cita={cita}
+                                                size={layoutSize}
+                                                loading={false}
+                                                showCancelButton={false}
+                                            />
                                         ))}
                                     </div>
 
-                                    {/* Paginación */}
+                                    {/* Paginación - Siempre visible para historial */}
                                     {getHistorialFiltrado().length > itemsPerPage && (
-                                        <Pagination
-                                            currentPage={currentPageHistorial}
-                                            totalPages={getTotalPages(getHistorialFiltrado().length)}
-                                            onPageChange={setCurrentPageHistorial}
-                                            itemsPerPage={itemsPerPage}
-                                            totalItems={getHistorialFiltrado().length}
-                                        />
+                                        <div className="mt-6">
+                                            <Pagination
+                                                currentPage={currentPageHistorial}
+                                                totalPages={getTotalPages(getHistorialFiltrado().length)}
+                                                onPageChange={setCurrentPageHistorial}
+                                                itemsPerPage={itemsPerPage}
+                                                totalItems={getHistorialFiltrado().length}
+                                            />
+                                        </div>
                                     )}
                                 </>
                             )}

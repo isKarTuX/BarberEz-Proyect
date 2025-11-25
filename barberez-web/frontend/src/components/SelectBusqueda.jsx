@@ -1,7 +1,7 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, memo, useMemo, useCallback } from 'react';
 import { FaSearch, FaChevronDown, FaCheck } from 'react-icons/fa';
 
-export default function SelectBusqueda({ 
+const SelectBusqueda = memo(function SelectBusqueda({ 
     value, 
     onChange, 
     options = [], 
@@ -14,10 +14,30 @@ export default function SelectBusqueda({
     const [searchTerm, setSearchTerm] = useState('');
     const containerRef = useRef(null);
 
-    // Filtrar opciones según búsqueda
-    const filteredOptions = options.filter(option => 
-        option[labelKey].toLowerCase().includes(searchTerm.toLowerCase())
+    // Memoizar opciones filtradas
+    const filteredOptions = useMemo(() => 
+        options.filter(option => 
+            option[labelKey].toLowerCase().includes(searchTerm.toLowerCase())
+        ), 
+        [options, searchTerm, labelKey]
     );
+
+    // Memoizar opción seleccionada
+    const selectedOption = useMemo(() => 
+        options.find(opt => opt[valueKey] === value),
+        [options, value, valueKey]
+    );
+
+    // Callbacks memoizados
+    const handleSelect = useCallback((optionValue) => {
+        onChange(optionValue);
+        setIsOpen(false);
+        setSearchTerm('');
+    }, [onChange]);
+
+    const toggleOpen = useCallback(() => {
+        setIsOpen(prev => !prev);
+    }, []);
 
     // Cerrar al hacer click fuera
     useEffect(() => {
@@ -32,21 +52,15 @@ export default function SelectBusqueda({
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    const handleSelect = (optionValue) => {
-        onChange(optionValue);
-        setIsOpen(false);
-        setSearchTerm('');
-    };
-
-    const selectedOption = options.find(opt => opt[valueKey] === value);
-
     return (
         <div ref={containerRef} className={`relative ${className}`}>
             {/* Botón principal */}
             <button
                 type="button"
-                onClick={() => setIsOpen(!isOpen)}
+                onClick={toggleOpen}
                 className="input-field flex items-center justify-between w-full text-left"
+                aria-haspopup="listbox"
+                aria-expanded={isOpen}
             >
                 <span className={value ? 'text-gray-800' : 'text-gray-400'}>
                     {selectedOption ? selectedOption[labelKey] : placeholder}
@@ -114,4 +128,10 @@ export default function SelectBusqueda({
             )}
         </div>
     );
-}
+}, (prevProps, nextProps) => {
+    // Solo re-renderizar si cambian props relevantes
+    return prevProps.value === nextProps.value &&
+           prevProps.options === nextProps.options;
+});
+
+export default SelectBusqueda;
