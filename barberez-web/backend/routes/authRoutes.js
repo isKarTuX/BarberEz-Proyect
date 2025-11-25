@@ -6,15 +6,23 @@ import rateLimit from 'express-rate-limit';
 const router = express.Router();
 
 // Rate limiter para login (prevenir ataques de fuerza bruta)
+// En desarrollo: más permisivo, en producción: más restrictivo
 const loginLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutos
-    max: 5, // 5 intentos por ventana
+    windowMs: process.env.NODE_ENV === 'production' ? 15 * 60 * 1000 : 5 * 60 * 1000, // 15 min (prod) / 5 min (dev)
+    max: process.env.NODE_ENV === 'production' ? 5 : 50, // 5 intentos (prod) / 50 intentos (dev)
     message: {
         success: false,
-        message: 'Demasiados intentos de login. Por favor intenta en 15 minutos.'
+        message: process.env.NODE_ENV === 'production'
+            ? 'Demasiados intentos de login. Por favor intenta en 15 minutos.'
+            : 'Demasiados intentos de login. Por favor intenta en 5 minutos.'
     },
     standardHeaders: true,
     legacyHeaders: false,
+    skip: (req) => {
+        // En desarrollo, opcional: desactivar completamente el rate limiter
+        // return process.env.NODE_ENV !== 'production';
+        return false; // Mantener rate limiter activo pero permisivo
+    }
 });
 
 // Login con validación y rate limiting
